@@ -3,6 +3,10 @@
     <TargetFramework>net472</TargetFramework>
     <RootNamespace>Fsp</RootNamespace>
     <AssemblyName>3waSshDrive.WinFsp</AssemblyName>
+    <!-- Interop.Api derives the native DLL/registry names and compatibility
+         check from these assembly attributes. Keep them aligned with WinFsp. -->
+    <Product>WinFsp</Product>
+    <FileVersion>2.1.0.0</FileVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
