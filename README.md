@@ -53,7 +53,7 @@ Pinned upstream revisions:
 | Component | Version | Commit |
 | --- | --- | --- |
 | WinFsp | v2.1 | `ddca7bd5481857a65ba552f643b8776fd070836f` |
-| SSH.NET | 2026.0.0 | `7b2fd3dbf2c86a80a7b06cea020aa5f821c9902e` |
+| SSH.NET | 2026.0.1 prerelease source | `f099365c9d4cf2ade92b92c203bbb2b345d2cd74` |
 
 ### WinFsp runtime verification
 

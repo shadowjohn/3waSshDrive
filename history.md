@@ -31,3 +31,9 @@
 - Added a v2.1.25156 runtime manifest plus preflight that verifies the installed x64 native DLL and driver SHA-256/version before a mount is allowed.
 - Downloaded the official v2.1.25156 MSI, verified its release SHA-256, installed only its Core runtime, and verified the installed DLL/driver hashes against the manifest.
 - Mounted the user-supplied SFTP root read-only at `T:`, enumerated the root, read a byte through the Windows filesystem API, and unmounted it successfully. No remote writes were made.
+
+## 2026-09-18 — .NET Framework SSH MAC compatibility repair
+
+- A `Test & Trust` probe to an OpenSSH 9.6 host failed with `MAC error` after key exchange; OpenSSH itself negotiated normally, so this was not an authentication, key, or host-key-pinning failure.
+- Advanced the source-built SSH.NET submodule to upstream `f099365c`, which resets the server MAC after `TransformFinalBlock` on .NET Framework before the next encrypted packet.
+- The rebuilt SFTP probe authenticated with the supplied PPK, read root metadata and a directory listing, and captured the host key successfully. No remote writes were made.
