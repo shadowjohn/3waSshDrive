@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>ThreeWa.SshDrive.App</RootNamespace>
+    <AssemblyName>3waSshDrive</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\3waSshDrive.Core\3waSshDrive.Core.csproj" />
+    <ProjectReference Include="..\3waSshDrive.Sftp\3waSshDrive.Sftp.csproj" />
+    <ProjectReference Include="..\3waSshDrive.FileSystem\3waSshDrive.FileSystem.csproj" />
+  </ItemGroup>
+</Project>
