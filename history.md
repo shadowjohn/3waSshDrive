@@ -18,4 +18,4 @@
 - Added WinFsp read-only metadata, directory enumeration, open/read/close, EOF handling, and write rejection.
 - Added deterministic mount lifecycle cleanup for both successful and failed mounts.
 - Added the first WinForms profile / trust / mount / unmount interface.
-- Added Windows CI and 24 unit tests across Core, SFTP, and filesystem callbacks before the UI build gate.
+- Added Windows CI and 26 unit tests across Core, SFTP, and filesystem callbacks before the UI build gate.
