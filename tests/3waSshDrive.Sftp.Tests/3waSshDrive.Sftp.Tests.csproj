@@ -9,6 +9,7 @@
     <PackageReference Include="MSTest.TestFramework" Version="3.6.4" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\3waSshDrive.Core\3waSshDrive.Core.csproj" />
     <ProjectReference Include="..\..\src\3waSshDrive.Sftp\3waSshDrive.Sftp.csproj" />
   </ItemGroup>
 </Project>
