@@ -40,6 +40,7 @@ namespace ThreeWa.SshDrive.App
         private readonly Button _mountButton = new Button();
         private readonly Button _unmountButton = new Button();
         private readonly Button _explorerButton = new Button();
+        private readonly Button _installDriverButton = new Button();
 
         private List<DriveProfile> _profileItems = new List<DriveProfile>();
         private string _selectedProfileName;
@@ -71,6 +72,7 @@ namespace ThreeWa.SshDrive.App
             BuildInterface();
             WireEvents();
             LoadProfiles();
+            RefreshDriverStatus();
         }
 
         private void BuildInterface()
@@ -133,6 +135,9 @@ namespace ThreeWa.SshDrive.App
             _mountButton.Text = "Mount";
             _unmountButton.Text = "Unmount";
             _explorerButton.Text = "Open Explorer";
+            _installDriverButton.Text = "安裝 WinFsp 驅動";
+            _installDriverButton.AutoSize = true;
+            _installDriverButton.Visible = false;
 
             var profileButtons = new FlowLayoutPanel
             {
@@ -167,6 +172,7 @@ namespace ThreeWa.SshDrive.App
             };
             actions.Controls.Add(_testButton);
             actions.Controls.Add(_mountButton);
+            actions.Controls.Add(_installDriverButton);
             actions.Controls.Add(_unmountButton);
             actions.Controls.Add(_explorerButton);
             page.Controls.Add(actions, 0, 2);
@@ -193,6 +199,8 @@ namespace ThreeWa.SshDrive.App
                 await RunBusyAsync(TestAndTrustAsync);
             _mountButton.Click += async (sender, args) =>
                 await RunBusyAsync(MountAsync);
+            _installDriverButton.Click += async (sender, args) =>
+                await RunBusyAsync(InstallDriverAsync);
             _unmountButton.Click += async (sender, args) =>
                 await RunBusyAsync(UnmountAsync);
             _explorerButton.Click += (sender, args) => ExecuteUi(OpenExplorer);
@@ -312,7 +320,10 @@ namespace ThreeWa.SshDrive.App
 
             var runtime = WinFspRuntimePreflight.CheckX64();
             if (!runtime.IsValid)
+            {
+                RefreshDriverStatus();
                 throw new InvalidOperationException(runtime.Error);
+            }
 
             var drive = profile.DriveLetter.ToUpperInvariant();
             if (_mountedDrives.ContainsKey(drive))
@@ -323,6 +334,30 @@ namespace ThreeWa.SshDrive.App
             _mountedDrives.Add(drive, mounted);
             UpsertProfile(profile);
             SetStatus("Mounted " + profile.Name + " at " + drive);
+        }
+
+        private async Task InstallDriverAsync()
+        {
+            SetStatus("正在透過 winget 安裝 WinFsp 驅動，請於跳出的管理員提權視窗點選「是」…");
+            await Task.Run(() => WinFspInstaller.InstallAsync());
+            RefreshDriverStatus();
+            SetStatus("WinFsp 驅動安裝完成且驗證通過，已可正常掛載。");
+        }
+
+        private bool RefreshDriverStatus()
+        {
+            var runtime = WinFspRuntimePreflight.CheckX64();
+            if (runtime.IsValid)
+            {
+                _installDriverButton.Visible = false;
+                _mountButton.Enabled = !_busy;
+                return true;
+            }
+
+            _installDriverButton.Visible = true;
+            _mountButton.Enabled = false;
+            SetStatus("WinFsp 未安裝或校驗失敗: " + runtime.Error);
+            return false;
         }
 
         private async Task UnmountAsync()
@@ -471,11 +506,16 @@ namespace ThreeWa.SshDrive.App
             _busy = busy;
             UseWaitCursor = busy;
             _testButton.Enabled = !busy;
-            _mountButton.Enabled = !busy;
             _unmountButton.Enabled = !busy;
             _saveButton.Enabled = !busy;
             _deleteButton.Enabled = !busy;
             _authenticationMode.Enabled = !busy;
+            _installDriverButton.Enabled = !busy;
+
+            var runtime = WinFspRuntimePreflight.CheckX64();
+            _mountButton.Enabled = !busy && runtime.IsValid;
+            _installDriverButton.Visible = !runtime.IsValid;
+
             UpdateAuthenticationControls();
         }
 

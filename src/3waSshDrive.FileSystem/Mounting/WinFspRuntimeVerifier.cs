@@ -146,7 +146,7 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
 
         public string DriverSha256 { get; }
 
-        internal static WinFspRuntimeVerification Success(
+        public static WinFspRuntimeVerification Success(
             string nativeDllPath,
             string driverPath,
             string nativeDllSha256,
@@ -161,7 +161,7 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
                 driverSha256);
         }
 
-        internal static WinFspRuntimeVerification Failure(string error)
+        public static WinFspRuntimeVerification Failure(string error)
         {
             return new WinFspRuntimeVerification(
                 false,
