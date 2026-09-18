@@ -51,6 +51,27 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
         }
 
         [TestMethod]
+        public void Mount_FailedWinFspMountPreservesFailureAndDisposesRemoteWhenHostCleanupThrows()
+        {
+            var events = new List<string>();
+            var remote = new TrackingRemoteFileSystem(events);
+            var host = new TrackingFileSystemHost(
+                events,
+                unchecked((int)0xc0000001),
+                throwOnDispose: true);
+            var manager = new MountManager(
+                profile => remote,
+                fileSystem => host);
+
+            var exception = Assert.ThrowsException<MountException>(
+                () => manager.Mount(ValidProfile()));
+
+            Assert.AreEqual(unchecked((int)0xc0000001), exception.Status);
+            CollectionAssert.Contains(events, "host.dispose");
+            CollectionAssert.Contains(events, "remote.dispose");
+        }
+
+        [TestMethod]
         public void Dispose_UnmountsHostBeforeClosingRemoteConnection()
         {
             var events = new List<string>();
@@ -134,12 +155,17 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
         {
             private readonly IList<string> _events;
             private readonly int _mountStatus;
+            private readonly bool _throwOnDispose;
             private bool _disposed;
 
-            public TrackingFileSystemHost(IList<string> events, int mountStatus)
+            public TrackingFileSystemHost(
+                IList<string> events,
+                int mountStatus,
+                bool throwOnDispose = false)
             {
                 _events = events;
                 _mountStatus = mountStatus;
+                _throwOnDispose = throwOnDispose;
             }
 
             public int Mount(string mountPoint)
@@ -159,6 +185,8 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
                     return;
                 _disposed = true;
                 _events.Add("host.dispose");
+                if (_throwOnDispose)
+                    throw new IOException("Simulated host cleanup failure.");
             }
         }
     }
