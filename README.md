@@ -9,7 +9,8 @@ Project a Linux workspace into Windows as a drive letter through WinFsp and SFTP
 The first milestone is deliberately read-only:
 
 - Multiple named SSH profiles.
-- Private-key path selection; private key contents are never copied into the profile store.
+- Per-profile authentication selection: private-key path or password.
+- Private-key contents and passwords are never copied into the profile store.
 - Explicit `Test & Trust` flow with SHA-256 host-key pinning.
 - Source-built SSH.NET SFTP client.
 - Source-built WinFsp .NET host layer.
@@ -27,10 +28,10 @@ The UI stores profiles at:
 - Windows 10 or Windows 11.
 - [.NET Framework 4.7.2](https://dotnet.microsoft.com/en-us/download/dotnet-framework/net472) runtime and developer pack.
 - Visual Studio 2022 with the .NET desktop build tools, or a compatible MSBuild/.NET SDK environment.
-- [WinFsp v2.1](https://github.com/winfsp/winfsp/releases/tag/v2.1) installed on the machine. The native runtime/driver is required; SSHFS-Win and Cygwin are not.
-- A Linux host with SSH/SFTP enabled and an unencrypted private key accepted for the selected user.
+- The official [WinFsp v2.1 Core runtime](https://github.com/winfsp/winfsp/releases/tag/v2.1) installed on the machine. The native runtime/driver is required; SSHFS-Win, Cygwin, and WinFsp Developer files are not.
+- A Linux host with SSH/SFTP enabled and either an accepted unencrypted private key or password for the selected user.
 
-Phase 1 does not persist private-key passphrases. Use a dedicated unencrypted key with narrow server-side authorization and filesystem permissions.
+Phase 1 does not persist private-key passphrases or SSH passwords. Passwords stay only in the running application memory, so enter a password again after restarting the application. Use a dedicated unencrypted key with narrow server-side authorization and filesystem permissions where key authentication is available.
 
 ## Get the source
 
@@ -53,6 +54,16 @@ Pinned upstream revisions:
 | --- | --- | --- |
 | WinFsp | v2.1 | `ddca7bd5481857a65ba552f643b8776fd070836f` |
 | SSH.NET | 2026.0.0 | `7b2fd3dbf2c86a80a7b06cea020aa5f821c9902e` |
+
+### WinFsp runtime verification
+
+Before a drive can mount, 3waSshDrive verifies the installed x64 WinFsp DLL and driver against the pinned v2.1.25156 runtime manifest at [`runtime/winfsp-2.1.25156-manifest.json`](runtime/winfsp-2.1.25156-manifest.json). The official MSI SHA-256 is:
+
+```text
+073A70E00F77423E34BED98B86E600DEF93393BA5822204FAC57A29324DB9F7A
+```
+
+The manifest pins `winfsp-x64.dll`, `winfsp-x64.sys`, and their file version. This is intentionally strict: a different WinFsp release must be reviewed and its manifest updated before 3waSshDrive will mount. The WinFsp Launcher service is not required for 3waSshDrive's direct in-process drive mounts.
 
 ## Build and test
 
@@ -78,7 +89,7 @@ src\3waSshDrive.App\bin\Release\net472\3waSshDrive.exe
 
 ## First connection
 
-1. Create a profile and enter host, port, username, remote root, drive letter, and private-key path.
+1. Create a profile and enter host, port, username, remote root, drive letter, and either a private-key path or password.
 2. Choose `Test & Trust`. The application connects, verifies that the remote root is a directory, captures the server SHA-256 host-key fingerprint, and saves the profile.
 3. Choose `Mount`.
 4. Open the drive through `Open Explorer`, then read a known file.
@@ -89,7 +100,8 @@ src\3waSshDrive.App\bin\Release\net472\3waSshDrive.exe
 ## Manual smoke test
 
 - WinFsp v2.1 is installed.
-- `Test & Trust` returns a fingerprint and the expected root.
+- The pinned runtime preflight succeeds before `Mount` continues.
+- `Test & Trust` returns a fingerprint and the expected root using the selected authentication method.
 - The selected drive letter appears in Explorer.
 - Directories enumerate in stable order.
 - A text file opens and content matches the Linux source.

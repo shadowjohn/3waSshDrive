@@ -44,8 +44,10 @@ namespace ThreeWa.SshDrive.Core.Tests
                         Username = "dev",
                         RemoteRoot = "/home/dev/project",
                         DriveLetter = "Z:",
+                        AuthenticationMode = AuthenticationMode.Password,
                         PrivateKeyPath = @"C:\keys\id_ed25519",
-                        HostKeyFingerprintSha256 = "SHA256:abc123"
+                        HostKeyFingerprintSha256 = "SHA256:abc123",
+                        Password = "must-not-be-persisted"
                     }
                 });
 
@@ -57,8 +59,12 @@ namespace ThreeWa.SshDrive.Core.Tests
                 Assert.AreEqual("dev", loaded.Username);
                 Assert.AreEqual("/home/dev/project", loaded.RemoteRoot);
                 Assert.AreEqual("Z:", loaded.DriveLetter);
+                Assert.AreEqual(AuthenticationMode.Password, loaded.AuthenticationMode);
                 Assert.AreEqual(@"C:\keys\id_ed25519", loaded.PrivateKeyPath);
                 Assert.AreEqual("SHA256:abc123", loaded.HostKeyFingerprintSha256);
+                Assert.IsNull(loaded.Password);
+                Assert.IsFalse(File.ReadAllText(filePath).Contains(
+                    "must-not-be-persisted"));
                 Assert.IsFalse(File.Exists(filePath + ".tmp"));
             }
             finally

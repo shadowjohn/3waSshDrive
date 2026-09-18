@@ -28,6 +28,27 @@ namespace ThreeWa.SshDrive.Core.Tests
         }
 
         [TestMethod]
+        public void Validate_AcceptsPasswordProfileWithoutAKeyPath()
+        {
+            var profile = new DriveProfile
+            {
+                Name = "PasswordServer",
+                Host = "203.0.113.11",
+                Port = 22,
+                Username = "dev",
+                RemoteRoot = "/home/dev/project",
+                DriveLetter = "Y:",
+                AuthenticationMode = AuthenticationMode.Password,
+                Password = "not-persisted",
+                HostKeyFingerprintSha256 = "SHA256:abc123"
+            };
+
+            var errors = DriveProfileValidator.Validate(profile);
+
+            Assert.AreEqual(0, errors.Count);
+        }
+
+        [TestMethod]
         public void Validate_ReportsEveryUnsafeOrMissingField()
         {
             var profile = new DriveProfile
@@ -55,6 +76,28 @@ namespace ThreeWa.SshDrive.Core.Tests
                 "Private key path is required.",
                 "A SHA-256 host-key fingerprint is required before mounting."
             }, new System.Collections.Generic.List<string>(errors));
+        }
+
+        [TestMethod]
+        public void Validate_RequiresPasswordForPasswordAuthentication()
+        {
+            var profile = new DriveProfile
+            {
+                Name = "PasswordServer",
+                Host = "203.0.113.11",
+                Port = 22,
+                Username = "dev",
+                RemoteRoot = "/home/dev/project",
+                DriveLetter = "Y:",
+                AuthenticationMode = AuthenticationMode.Password,
+                HostKeyFingerprintSha256 = "SHA256:abc123"
+            };
+
+            var errors = DriveProfileValidator.Validate(profile);
+
+            CollectionAssert.Contains(
+                new System.Collections.Generic.List<string>(errors),
+                "Password is required.");
         }
     }
 }

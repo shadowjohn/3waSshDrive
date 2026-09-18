@@ -24,9 +24,17 @@ namespace ThreeWa.SshDrive.Core.Models
         public string DriveLetter { get; set; } = "Z:";
 
         [DataMember(Order = 7)]
-        public string PrivateKeyPath { get; set; }
+        public AuthenticationMode AuthenticationMode { get; set; } =
+            AuthenticationMode.PrivateKey;
 
         [DataMember(Order = 8)]
+        public string PrivateKeyPath { get; set; }
+
+        [DataMember(Order = 9)]
         public string HostKeyFingerprintSha256 { get; set; }
+
+        // 密碼只供目前應用程式執行期間使用，絕不寫入 profiles.json。
+        [IgnoreDataMember]
+        public string Password { get; set; }
     }
 }

@@ -27,7 +27,9 @@ namespace ThreeWa.SshDrive.App
         private readonly TextBox _username = new TextBox();
         private readonly TextBox _remoteRoot = new TextBox();
         private readonly ComboBox _driveLetter = new ComboBox();
+        private readonly ComboBox _authenticationMode = new ComboBox();
         private readonly TextBox _privateKeyPath = new TextBox();
+        private readonly TextBox _password = new TextBox();
         private readonly TextBox _hostFingerprint = new TextBox();
         private readonly Label _status = new Label();
         private readonly Button _newButton = new Button();
@@ -98,7 +100,7 @@ namespace ThreeWa.SshDrive.App
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 3,
-                RowCount = 9,
+                RowCount = 11,
                 AutoSize = true
             };
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
@@ -107,15 +109,20 @@ namespace ThreeWa.SshDrive.App
 
             ConfigureComboBox(_profiles);
             ConfigureComboBox(_driveLetter);
+            ConfigureComboBox(_authenticationMode);
             for (var letter = 'D'; letter <= 'Z'; letter++)
                 _driveLetter.Items.Add(letter + ":");
             _driveLetter.SelectedItem = "Z:";
+            _authenticationMode.Items.Add("Private key");
+            _authenticationMode.Items.Add("Password");
+            _authenticationMode.SelectedIndex = 0;
 
             _port.Minimum = 1;
             _port.Maximum = 65535;
             _port.Value = 22;
             _port.Width = 120;
             _remoteRoot.Text = "/";
+            _password.UseSystemPasswordChar = true;
             _hostFingerprint.ReadOnly = true;
 
             _newButton.Text = "New";
@@ -145,8 +152,10 @@ namespace ThreeWa.SshDrive.App
             AddRow(fields, 4, "Username", _username, null);
             AddRow(fields, 5, "Remote root", _remoteRoot, null);
             AddRow(fields, 6, "Drive letter", _driveLetter, null);
-            AddRow(fields, 7, "Private key", _privateKeyPath, _browseButton);
-            AddRow(fields, 8, "Host fingerprint", _hostFingerprint, null);
+            AddRow(fields, 7, "Authentication", _authenticationMode, null);
+            AddRow(fields, 8, "Private key", _privateKeyPath, _browseButton);
+            AddRow(fields, 9, "Password", _password, null);
+            AddRow(fields, 10, "Host fingerprint", _hostFingerprint, null);
             page.Controls.Add(fields, 0, 1);
 
             var actions = new FlowLayoutPanel
@@ -174,6 +183,8 @@ namespace ThreeWa.SshDrive.App
         private void WireEvents()
         {
             _profiles.SelectedIndexChanged += (sender, args) => LoadSelectedProfile();
+            _authenticationMode.SelectedIndexChanged += (sender, args) =>
+                UpdateAuthenticationControls();
             _newButton.Click += (sender, args) => NewProfile();
             _saveButton.Click += (sender, args) => ExecuteUi(SaveCurrentProfile);
             _deleteButton.Click += (sender, args) => ExecuteUi(DeleteCurrentProfile);
@@ -186,6 +197,7 @@ namespace ThreeWa.SshDrive.App
                 await RunBusyAsync(UnmountAsync);
             _explorerButton.Click += (sender, args) => ExecuteUi(OpenExplorer);
             FormClosed += (sender, args) => DisposeMountedDrives();
+            UpdateAuthenticationControls();
         }
 
         private void LoadProfiles()
@@ -298,6 +310,10 @@ namespace ThreeWa.SshDrive.App
             if (errors.Count > 0)
                 throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
 
+            var runtime = WinFspRuntimePreflight.CheckX64();
+            if (!runtime.IsValid)
+                throw new InvalidOperationException(runtime.Error);
+
             var drive = profile.DriveLetter.ToUpperInvariant();
             if (_mountedDrives.ContainsKey(drive))
                 throw new InvalidOperationException(drive + " is already mounted by 3waSshDrive.");
@@ -377,7 +393,11 @@ namespace ThreeWa.SshDrive.App
                 Username = _username.Text.Trim(),
                 RemoteRoot = _remoteRoot.Text.Trim(),
                 DriveLetter = SelectedDriveLetter(),
+                AuthenticationMode = SelectedAuthenticationMode(),
                 PrivateKeyPath = _privateKeyPath.Text.Trim(),
+                Password = SelectedAuthenticationMode() == AuthenticationMode.Password
+                    ? _password.Text
+                    : null,
                 HostKeyFingerprintSha256 = _hostFingerprint.Text.Trim()
             };
         }
@@ -396,8 +416,12 @@ namespace ThreeWa.SshDrive.App
             _driveLetter.SelectedItem = string.IsNullOrWhiteSpace(profile.DriveLetter)
                 ? "Z:"
                 : profile.DriveLetter.ToUpperInvariant();
+            _authenticationMode.SelectedIndex =
+                profile.AuthenticationMode == AuthenticationMode.Password ? 1 : 0;
             _privateKeyPath.Text = profile.PrivateKeyPath ?? string.Empty;
+            _password.Text = profile.Password ?? string.Empty;
             _hostFingerprint.Text = profile.HostKeyFingerprintSha256 ?? string.Empty;
+            UpdateAuthenticationControls();
         }
 
         private static void ValidateForProbe(DriveProfile profile)
@@ -451,6 +475,8 @@ namespace ThreeWa.SshDrive.App
             _unmountButton.Enabled = !busy;
             _saveButton.Enabled = !busy;
             _deleteButton.Enabled = !busy;
+            _authenticationMode.Enabled = !busy;
+            UpdateAuthenticationControls();
         }
 
         private void ShowError(Exception exception)
@@ -472,6 +498,22 @@ namespace ThreeWa.SshDrive.App
         private string SelectedDriveLetter()
         {
             return (_driveLetter.SelectedItem?.ToString() ?? "Z:").ToUpperInvariant();
+        }
+
+        private AuthenticationMode SelectedAuthenticationMode()
+        {
+            return _authenticationMode.SelectedIndex == 1
+                ? AuthenticationMode.Password
+                : AuthenticationMode.PrivateKey;
+        }
+
+        private void UpdateAuthenticationControls()
+        {
+            var usingPrivateKey =
+                SelectedAuthenticationMode() == AuthenticationMode.PrivateKey;
+            _privateKeyPath.Enabled = usingPrivateKey && !_busy;
+            _browseButton.Enabled = usingPrivateKey && !_busy;
+            _password.Enabled = !usingPrivateKey && !_busy;
         }
 
         private bool IsMounted(string driveLetter)

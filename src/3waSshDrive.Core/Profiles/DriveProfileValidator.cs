@@ -33,8 +33,15 @@ namespace ThreeWa.SshDrive.Core.Profiles
             if (string.IsNullOrWhiteSpace(profile.DriveLetter) ||
                 !DriveLetterPattern.IsMatch(profile.DriveLetter))
                 errors.Add("Drive letter must use the form Z:.");
-            if (string.IsNullOrWhiteSpace(profile.PrivateKeyPath))
+            if (!System.Enum.IsDefined(
+                typeof(AuthenticationMode), profile.AuthenticationMode))
+                errors.Add("Authentication mode is invalid.");
+            else if (profile.AuthenticationMode == AuthenticationMode.PrivateKey &&
+                     string.IsNullOrWhiteSpace(profile.PrivateKeyPath))
                 errors.Add("Private key path is required.");
+            else if (profile.AuthenticationMode == AuthenticationMode.Password &&
+                     string.IsNullOrEmpty(profile.Password))
+                errors.Add("Password is required.");
             if (string.IsNullOrWhiteSpace(profile.HostKeyFingerprintSha256))
                 errors.Add("A SHA-256 host-key fingerprint is required before mounting.");
 

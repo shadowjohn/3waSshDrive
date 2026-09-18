@@ -45,20 +45,9 @@ namespace ThreeWa.SshDrive.Sftp
                 if (_client?.IsConnected == true)
                     return;
 
-                var keyPath = Environment.ExpandEnvironmentVariables(
-                    _profile.PrivateKeyPath ?? string.Empty);
-                if (!File.Exists(keyPath))
-                {
-                    throw new RemoteConnectionException(
-                        "Private key file was not found: " + keyPath);
-                }
-
                 try
                 {
-                    _privateKey = new PrivateKeyFile(keyPath);
-                    var authentication = new PrivateKeyAuthenticationMethod(
-                        _profile.Username,
-                        _privateKey);
+                    var authentication = CreateAuthenticationMethod();
                     var connectionInfo = new ConnectionInfo(
                         _profile.Host,
                         _profile.Port,
@@ -143,6 +132,35 @@ namespace ThreeWa.SshDrive.Sftp
         {
             eventArgs.CanTrust = _hostKeyPolicy.Evaluate(
                 eventArgs.FingerPrintSHA256);
+        }
+
+        private AuthenticationMethod CreateAuthenticationMethod()
+        {
+            if (_profile.AuthenticationMode == AuthenticationMode.Password)
+            {
+                if (string.IsNullOrEmpty(_profile.Password))
+                {
+                    throw new RemoteConnectionException(
+                        "A password is required for password authentication.");
+                }
+
+                return new PasswordAuthenticationMethod(
+                    _profile.Username,
+                    _profile.Password);
+            }
+
+            var keyPath = Environment.ExpandEnvironmentVariables(
+                _profile.PrivateKeyPath ?? string.Empty);
+            if (!File.Exists(keyPath))
+            {
+                throw new RemoteConnectionException(
+                    "Private key file was not found: " + keyPath);
+            }
+
+            _privateKey = new PrivateKeyFile(keyPath);
+            return new PrivateKeyAuthenticationMethod(
+                _profile.Username,
+                _privateKey);
         }
 
         private static RemoteEntry MapEntry(ISftpFile entry)

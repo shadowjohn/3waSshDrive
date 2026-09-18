@@ -11,4 +11,9 @@
     <ProjectReference Include="..\3waSshDrive.Sftp\3waSshDrive.Sftp.csproj" />
     <ProjectReference Include="..\3waSshDrive.FileSystem\3waSshDrive.FileSystem.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\runtime\winfsp-2.1.25156-manifest.json"
+          Link="runtime\winfsp-2.1.25156-manifest.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

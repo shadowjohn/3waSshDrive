@@ -9,4 +9,9 @@
     <ProjectReference Include="..\3waSshDrive.Sftp\3waSshDrive.Sftp.csproj" />
     <ProjectReference Include="..\3waSshDrive.WinFsp\3waSshDrive.WinFsp.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.Runtime.Serialization" />
+    <EmbeddedResource Include="..\..\runtime\winfsp-2.1.25156-manifest.json"
+                      Link="runtime\winfsp-2.1.25156-manifest.json" />
+  </ItemGroup>
 </Project>
