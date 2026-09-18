@@ -98,6 +98,70 @@ namespace ThreeWa.SshDrive.Sftp
             return Execute<Stream>(path, () => _client.OpenRead(path));
         }
 
+        public Stream OpenFile(string path, FileMode mode, FileAccess access)
+        {
+            return Execute<Stream>(path, () => _client.Open(path, mode, access));
+        }
+
+        public void CreateDirectory(string path)
+        {
+            Execute(path, () => _client.CreateDirectory(path));
+        }
+
+        public void DeleteFile(string path)
+        {
+            Execute(path, () => _client.DeleteFile(path));
+        }
+
+        public void DeleteDirectory(string path)
+        {
+            Execute(path, () => _client.DeleteDirectory(path));
+        }
+
+        public void Rename(string oldPath, string newPath, bool replaceIfExists)
+        {
+            Execute(oldPath, () =>
+            {
+                if (replaceIfExists)
+                {
+                    try
+                    {
+                        _client.RenameFile(oldPath, newPath, isPosix: true);
+                        return;
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            if (_client.Exists(newPath))
+                            {
+                                var attrs = _client.GetAttributes(newPath);
+                                if (attrs.IsDirectory)
+                                    _client.DeleteDirectory(newPath);
+                                else
+                                    _client.DeleteFile(newPath);
+                            }
+                        }
+                        catch
+                        {
+                            // If explicit removal fails, continue to standard rename
+                        }
+                    }
+                }
+
+                _client.RenameFile(oldPath, newPath, isPosix: false);
+            });
+        }
+
+        private void Execute(string path, Action operation)
+        {
+            Execute(path, () =>
+            {
+                operation();
+                return true;
+            });
+        }
+
         public void Dispose()
         {
             lock (_lifecycleLock)

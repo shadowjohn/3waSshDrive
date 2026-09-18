@@ -51,7 +51,8 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
 
                 var fileSystem = new SftpReadOnlyFileSystem(
                     remote,
-                    profile.RemoteRoot);
+                    profile.RemoteRoot,
+                    profile.ReadOnly);
                 host = _hostFactory(fileSystem);
                 var status = host.Mount(profile.DriveLetter.ToUpperInvariant());
                 if (status < 0)

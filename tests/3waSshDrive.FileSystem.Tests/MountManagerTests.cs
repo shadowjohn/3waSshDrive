@@ -142,6 +142,31 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
                 throw new NotSupportedException();
             }
 
+            public Stream OpenFile(string path, FileMode mode, FileAccess access)
+            {
+                throw new NotSupportedException();
+            }
+
+            public void CreateDirectory(string path)
+            {
+                throw new NotSupportedException();
+            }
+
+            public void DeleteFile(string path)
+            {
+                throw new NotSupportedException();
+            }
+
+            public void DeleteDirectory(string path)
+            {
+                throw new NotSupportedException();
+            }
+
+            public void Rename(string oldPath, string newPath, bool replaceIfExists)
+            {
+                throw new NotSupportedException();
+            }
+
             public void Dispose()
             {
                 if (!IsConnected)

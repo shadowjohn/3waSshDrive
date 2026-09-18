@@ -31,6 +31,7 @@ namespace ThreeWa.SshDrive.App
         private readonly TextBox _privateKeyPath = new TextBox();
         private readonly TextBox _password = new TextBox();
         private readonly TextBox _hostFingerprint = new TextBox();
+        private readonly CheckBox _readOnly = new CheckBox();
         private readonly Label _status = new Label();
         private readonly Button _newButton = new Button();
         private readonly Button _saveButton = new Button();
@@ -102,7 +103,7 @@ namespace ThreeWa.SshDrive.App
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 3,
-                RowCount = 11,
+                RowCount = 12,
                 AutoSize = true
             };
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
@@ -126,6 +127,8 @@ namespace ThreeWa.SshDrive.App
             _remoteRoot.Text = "/";
             _password.UseSystemPasswordChar = true;
             _hostFingerprint.ReadOnly = true;
+            _readOnly.Text = "Read-only (唯讀模式)";
+            _readOnly.AutoSize = true;
 
             _newButton.Text = "New";
             _saveButton.Text = "Save";
@@ -161,6 +164,7 @@ namespace ThreeWa.SshDrive.App
             AddRow(fields, 8, "Private key", _privateKeyPath, _browseButton);
             AddRow(fields, 9, "Password", _password, null);
             AddRow(fields, 10, "Host fingerprint", _hostFingerprint, null);
+            AddRow(fields, 11, "Options", _readOnly, null);
             page.Controls.Add(fields, 0, 1);
 
             var actions = new FlowLayoutPanel
@@ -433,7 +437,8 @@ namespace ThreeWa.SshDrive.App
                 Password = SelectedAuthenticationMode() == AuthenticationMode.Password
                     ? _password.Text
                     : null,
-                HostKeyFingerprintSha256 = _hostFingerprint.Text.Trim()
+                HostKeyFingerprintSha256 = _hostFingerprint.Text.Trim(),
+                ReadOnly = _readOnly.Checked
             };
         }
 
@@ -456,6 +461,7 @@ namespace ThreeWa.SshDrive.App
             _privateKeyPath.Text = profile.PrivateKeyPath ?? string.Empty;
             _password.Text = profile.Password ?? string.Empty;
             _hostFingerprint.Text = profile.HostKeyFingerprintSha256 ?? string.Empty;
+            _readOnly.Checked = profile.ReadOnly;
             UpdateAuthenticationControls();
         }
 
@@ -511,6 +517,7 @@ namespace ThreeWa.SshDrive.App
             _deleteButton.Enabled = !busy;
             _authenticationMode.Enabled = !busy;
             _installDriverButton.Enabled = !busy;
+            _readOnly.Enabled = !busy;
 
             var runtime = WinFspRuntimePreflight.CheckX64();
             _mountButton.Enabled = !busy && runtime.IsValid;

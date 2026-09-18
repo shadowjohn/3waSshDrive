@@ -13,11 +13,13 @@ namespace ThreeWa.SshDrive.FileSystem
             Stream = stream;
         }
 
-        public RemoteEntry Entry { get; }
+        public RemoteEntry Entry { get; set; }
 
         public Stream Stream { get; }
 
         public object SyncRoot { get; } = new object();
+
+        public bool DeleteOnClose { get; set; }
 
         public IReadOnlyList<RemoteEntry> DirectoryEntries { get; set; }
 

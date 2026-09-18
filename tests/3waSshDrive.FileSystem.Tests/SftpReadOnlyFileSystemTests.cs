@@ -141,7 +141,8 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
         {
             var fileSystem = new SftpReadOnlyFileSystem(
                 new FakeRemoteFileSystem(),
-                "/home/dev");
+                "/home/dev",
+                readOnly: true);
 
             var status = fileSystem.Write(
                 null, null, IntPtr.Zero, 0, 0, false, false,
@@ -150,6 +151,138 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
 
             Assert.AreEqual(FileSystemBase.STATUS_MEDIA_WRITE_PROTECTED, status);
             Assert.AreEqual((uint)0, bytesTransferred);
+        }
+
+        [TestMethod]
+        public void CreateAndWrite_CreatesFileAndWritesContent()
+        {
+            var remote = new FakeRemoteFileSystem();
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
+
+            var createStatus = fileSystem.Create(
+                @"\hello.txt",
+                0,
+                0x40000000,
+                0,
+                null,
+                0,
+                out var fileNode,
+                out var fileDesc,
+                out var fileInfo,
+                out var normalizedName);
+
+            Assert.AreEqual(FileSystemBase.STATUS_SUCCESS, createStatus);
+
+            var textBytes = Encoding.UTF8.GetBytes("hello world");
+            var buffer = Marshal.AllocHGlobal(textBytes.Length);
+            try
+            {
+                Marshal.Copy(textBytes, 0, buffer, textBytes.Length);
+                var writeStatus = fileSystem.Write(
+                    fileNode,
+                    fileDesc,
+                    buffer,
+                    0,
+                    (uint)textBytes.Length,
+                    false,
+                    false,
+                    out var bytesTransferred,
+                    out fileInfo);
+
+                Assert.AreEqual(FileSystemBase.STATUS_SUCCESS, writeStatus);
+                Assert.AreEqual((uint)textBytes.Length, bytesTransferred);
+                Assert.AreEqual((ulong)textBytes.Length, fileInfo.FileSize);
+
+                fileSystem.Flush(fileNode, fileDesc, out _);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+                fileSystem.Close(fileNode, fileDesc);
+            }
+
+            var savedBytes = remote.GetContent("/home/dev/hello.txt");
+            Assert.IsNotNull(savedBytes);
+            Assert.AreEqual("hello world", Encoding.UTF8.GetString(savedBytes));
+        }
+
+        [TestMethod]
+        public void Create_CreatesDirectory()
+        {
+            var remote = new FakeRemoteFileSystem();
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
+
+            var status = fileSystem.Create(
+                @"\subfolder",
+                FileSystemBase.FILE_DIRECTORY_FILE,
+                0,
+                0,
+                null,
+                0,
+                out var fileNode,
+                out var fileDesc,
+                out var fileInfo,
+                out _);
+
+            Assert.AreEqual(FileSystemBase.STATUS_SUCCESS, status);
+            Assert.IsTrue(remote.Exists("/home/dev/subfolder"));
+            Assert.IsTrue(remote.GetEntry("/home/dev/subfolder").IsDirectory);
+            fileSystem.Close(fileNode, fileDesc);
+        }
+
+        [TestMethod]
+        public void Overwrite_TruncatesFileLengthToZero()
+        {
+            var remote = new FakeRemoteFileSystem();
+            remote.AddEntry(File("data.txt", "/home/dev/data.txt", 5), Encoding.UTF8.GetBytes("12345"));
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
+
+            fileSystem.Open(
+                @"\data.txt", 0, 0x40000000,
+                out var node, out var desc, out var info, out _);
+
+            try
+            {
+                var overwriteStatus = fileSystem.Overwrite(node, desc, 0, false, 0, out var newInfo);
+                Assert.AreEqual(FileSystemBase.STATUS_SUCCESS, overwriteStatus);
+                Assert.AreEqual((ulong)0, newInfo.FileSize);
+            }
+            finally
+            {
+                fileSystem.Close(node, desc);
+            }
+        }
+
+        [TestMethod]
+        public void Rename_RenamesRemoteFile()
+        {
+            var remote = new FakeRemoteFileSystem();
+            remote.AddEntry(File("old.txt", "/home/dev/old.txt", 4), Encoding.UTF8.GetBytes("test"));
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
+
+            var status = fileSystem.Rename(null, null, @"\old.txt", @"\renamed.txt", true);
+
+            Assert.AreEqual(FileSystemBase.STATUS_SUCCESS, status);
+            Assert.IsFalse(remote.Exists("/home/dev/old.txt"));
+            Assert.IsTrue(remote.Exists("/home/dev/renamed.txt"));
+            Assert.AreEqual("test", Encoding.UTF8.GetString(remote.GetContent("/home/dev/renamed.txt")));
+        }
+
+        [TestMethod]
+        public void Cleanup_WithDeleteFlag_DeletesFile()
+        {
+            var remote = new FakeRemoteFileSystem();
+            remote.AddEntry(File("del.txt", "/home/dev/del.txt", 4), Encoding.UTF8.GetBytes("test"));
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
+
+            fileSystem.Open(
+                @"\del.txt", 0, 0,
+                out var node, out var desc, out var info, out _);
+
+            fileSystem.SetDelete(node, desc, @"\del.txt", true);
+            fileSystem.Cleanup(node, desc, @"\del.txt", FileSystemBase.CleanupDelete);
+
+            Assert.IsFalse(remote.Exists("/home/dev/del.txt"));
         }
 
         private static RemoteEntry Directory(string name, string path)
