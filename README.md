@@ -56,6 +56,14 @@ Pinned upstream revisions:
 
 ## Build and test
 
+### Lazy Windows route
+
+Double-click `build.bat` once to initialize the pinned submodules, restore,
+test, and create a Release build. Then double-click `run.bat` to launch the
+application. If the executable is missing, `run.bat` builds it automatically.
+
+### Command line
+
 ```powershell
 dotnet restore .\3waSshDrive.sln
 dotnet test .\3waSshDrive.sln -c Release --no-restore
