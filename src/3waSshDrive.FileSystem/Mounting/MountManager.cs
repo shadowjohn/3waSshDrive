@@ -65,8 +65,25 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
             }
             catch
             {
-                host?.Dispose();
-                remote?.Dispose();
+                try
+                {
+                    host?.Dispose();
+                }
+                catch
+                {
+                    // Preserve the original connection or mount failure.
+                }
+                finally
+                {
+                    try
+                    {
+                        remote?.Dispose();
+                    }
+                    catch
+                    {
+                        // Preserve the original connection or mount failure.
+                    }
+                }
                 throw;
             }
         }
