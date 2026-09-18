@@ -30,7 +30,8 @@ namespace ThreeWa.SshDrive.Core.Tests
             var exception = Assert.ThrowsException<ArgumentException>(
                 () => RemotePathMapper.Map("/home/feather", @"\..\etc\passwd"));
 
-            Assert.AreEqual("Parent path segments are not allowed. (Parameter 'windowsPath')", exception.Message);
+            Assert.AreEqual("windowsPath", exception.ParamName);
+            StringAssert.StartsWith(exception.Message, "Parent path segments are not allowed.");
         }
 
         [TestMethod]
