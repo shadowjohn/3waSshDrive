@@ -10,7 +10,8 @@
 | Lookup metadata | Supported | SFTP size/access/modified fields |
 | Enumerate directory | Supported | Stable case-insensitive order |
 | Open/read/close file | Supported | Offset reads through an open SFTP stream |
-| Create/write/rename/delete | Rejected | `STATUS_MEDIA_WRITE_PROTECTED` |
+| Create/write | Rejected | `STATUS_MEDIA_WRITE_PROTECTED` |
+| Rename/delete and other mutations | Rejected | Unsupported by the read-only WinFsp adapter |
 
 ## Windows ↔ Linux mapping
 
