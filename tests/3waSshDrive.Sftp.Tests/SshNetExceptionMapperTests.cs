@@ -43,7 +43,7 @@ namespace ThreeWa.SshDrive.Sftp.Tests
         {
             var mapped = SshNetExceptionMapper.Translate(
                 new SshConnectionException("connection lost"),
-                "/home/feather");
+                "/home/dev");
 
             Assert.IsInstanceOfType(mapped, typeof(RemoteConnectionException));
             StringAssert.Contains(mapped.Message, "connection lost");

@@ -11,10 +11,10 @@ namespace ThreeWa.SshDrive.Core.Tests
         public void Map_JoinsWindowsPathBelowNormalizedRemoteRoot()
         {
             var result = RemotePathMapper.Map(
-                "/home/feather/",
+                "/home/dev/",
                 @"\packs\yolo\api.php");
 
-            Assert.AreEqual("/home/feather/packs/yolo/api.php", result);
+            Assert.AreEqual("/home/dev/packs/yolo/api.php", result);
         }
 
         [TestMethod]
@@ -28,7 +28,7 @@ namespace ThreeWa.SshDrive.Core.Tests
         public void Map_RejectsParentTraversal()
         {
             var exception = Assert.ThrowsException<ArgumentException>(
-                () => RemotePathMapper.Map("/home/feather", @"\..\etc\passwd"));
+                () => RemotePathMapper.Map("/home/dev", @"\..\etc\passwd"));
 
             Assert.AreEqual("windowsPath", exception.ParamName);
             StringAssert.StartsWith(exception.Message, "Parent path segments are not allowed.");
@@ -38,7 +38,7 @@ namespace ThreeWa.SshDrive.Core.Tests
         public void Map_RejectsRelativeRemoteRoot()
         {
             Assert.ThrowsException<ArgumentException>(
-                () => RemotePathMapper.Map("home/feather", @"\project"));
+                () => RemotePathMapper.Map("home/dev", @"\project"));
         }
     }
 }

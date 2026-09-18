@@ -78,11 +78,11 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
         {
             return new DriveProfile
             {
-                Name = "AIHub-5090",
-                Host = "192.168.1.100",
+                Name = "DevServer",
+                Host = "203.0.113.10",
                 Port = 22,
-                Username = "feather",
-                RemoteRoot = "/home/feather",
+                Username = "dev",
+                RemoteRoot = "/home/dev",
                 DriveLetter = "Z:",
                 PrivateKeyPath = @"C:\keys\id_ed25519",
                 HostKeyFingerprintSha256 = "SHA256:abc123"

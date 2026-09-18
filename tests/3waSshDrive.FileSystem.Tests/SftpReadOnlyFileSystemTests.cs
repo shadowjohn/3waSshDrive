@@ -20,8 +20,8 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
         public void GetSecurityByName_MapsDirectoryMetadata()
         {
             var remote = new FakeRemoteFileSystem();
-            remote.AddEntry(Directory("project", "/home/feather/project"));
-            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/feather");
+            remote.AddEntry(Directory("project", "/home/dev/project"));
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
             byte[] securityDescriptor = null;
 
             var status = fileSystem.GetSecurityByName(
@@ -39,9 +39,9 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
         {
             var remote = new FakeRemoteFileSystem();
             remote.AddEntry(
-                File("README.md", "/home/feather/README.md", 6),
+                File("README.md", "/home/dev/README.md", 6),
                 Encoding.UTF8.GetBytes("abcdef"));
-            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/feather");
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
 
             var openStatus = fileSystem.Open(
                 @"\README.md",
@@ -85,9 +85,9 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
         {
             var remote = new FakeRemoteFileSystem();
             remote.AddEntry(
-                File("small.txt", "/home/feather/small.txt", 2),
+                File("small.txt", "/home/dev/small.txt", 2),
                 Encoding.UTF8.GetBytes("ok"));
-            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/feather");
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
             fileSystem.Open(
                 @"\small.txt", 0, 0,
                 out var node, out var desc, out var info, out var name);
@@ -111,13 +111,13 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
         public void ReadDirectoryEntry_ReturnsStableCaseInsensitiveOrder()
         {
             var remote = new FakeRemoteFileSystem();
-            var root = Directory("", "/home/feather");
+            var root = Directory("", "/home/dev");
             remote.AddEntry(root);
             remote.SetDirectory(
-                "/home/feather",
-                File("z.txt", "/home/feather/z.txt", 1),
-                File("Alpha.txt", "/home/feather/Alpha.txt", 1));
-            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/feather");
+                "/home/dev",
+                File("z.txt", "/home/dev/z.txt", 1),
+                File("Alpha.txt", "/home/dev/Alpha.txt", 1));
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
             fileSystem.Open(
                 @"\", FileSystemBase.FILE_DIRECTORY_FILE, 0,
                 out var node, out var desc, out var info, out var normalizedName);
@@ -141,7 +141,7 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
         {
             var fileSystem = new SftpReadOnlyFileSystem(
                 new FakeRemoteFileSystem(),
-                "/home/feather");
+                "/home/dev");
 
             var status = fileSystem.Write(
                 null, null, IntPtr.Zero, 0, 0, false, false,

@@ -12,13 +12,13 @@ namespace ThreeWa.SshDrive.Core.Tests
         {
             var profile = new DriveProfile
             {
-                Name = "AIHub-5090",
-                Host = "192.168.1.100",
+                Name = "DevServer",
+                Host = "203.0.113.10",
                 Port = 22,
-                Username = "feather",
-                RemoteRoot = "/home/feather/3waAIHub",
+                Username = "dev",
+                RemoteRoot = "/home/dev/project",
                 DriveLetter = "Z:",
-                PrivateKeyPath = @"C:\Users\feather\.ssh\id_ed25519",
+                PrivateKeyPath = @"C:\Users\dev\.ssh\id_ed25519",
                 HostKeyFingerprintSha256 = "SHA256:abc123"
             };
 
@@ -36,7 +36,7 @@ namespace ThreeWa.SshDrive.Core.Tests
                 Host = "",
                 Port = 70000,
                 Username = null,
-                RemoteRoot = "home/feather",
+                RemoteRoot = "home/dev",
                 DriveLetter = "ZZ:",
                 PrivateKeyPath = "",
                 HostKeyFingerprintSha256 = ""

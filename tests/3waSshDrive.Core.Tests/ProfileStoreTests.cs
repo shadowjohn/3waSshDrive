@@ -38,11 +38,11 @@ namespace ThreeWa.SshDrive.Core.Tests
                 {
                     new DriveProfile
                     {
-                        Name = "AIHub-5090",
-                        Host = "192.168.1.100",
+                        Name = "DevServer",
+                        Host = "203.0.113.10",
                         Port = 2222,
-                        Username = "feather",
-                        RemoteRoot = "/home/feather/3waAIHub",
+                        Username = "dev",
+                        RemoteRoot = "/home/dev/project",
                         DriveLetter = "Z:",
                         PrivateKeyPath = @"C:\keys\id_ed25519",
                         HostKeyFingerprintSha256 = "SHA256:abc123"
@@ -51,11 +51,11 @@ namespace ThreeWa.SshDrive.Core.Tests
 
                 var loaded = store.Load().Single();
 
-                Assert.AreEqual("AIHub-5090", loaded.Name);
-                Assert.AreEqual("192.168.1.100", loaded.Host);
+                Assert.AreEqual("DevServer", loaded.Name);
+                Assert.AreEqual("203.0.113.10", loaded.Host);
                 Assert.AreEqual(2222, loaded.Port);
-                Assert.AreEqual("feather", loaded.Username);
-                Assert.AreEqual("/home/feather/3waAIHub", loaded.RemoteRoot);
+                Assert.AreEqual("dev", loaded.Username);
+                Assert.AreEqual("/home/dev/project", loaded.RemoteRoot);
                 Assert.AreEqual("Z:", loaded.DriveLetter);
                 Assert.AreEqual(@"C:\keys\id_ed25519", loaded.PrivateKeyPath);
                 Assert.AreEqual("SHA256:abc123", loaded.HostKeyFingerprintSha256);
