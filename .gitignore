@@ -9,3 +9,11 @@ artifacts/
 log/
 lock.pid
 *.pid
+
+# Sensitive credentials & profiles
+profiles.json
+*.pem
+*.ppk
+*.key
+id_rsa*
+id_ed25519*
