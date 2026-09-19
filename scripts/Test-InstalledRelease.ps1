@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$SetupPath,
     [Parameter(Mandatory = $true)][string]$ExpectedDisplayVersion,
-    [Parameter(Mandatory = $true)][string]$ExpectedPackageVersion
+    [Parameter(Mandatory = $true)][string]$ExpectedPackageVersion,
+    [string]$AdditionalSmokeScript
 )
 
 Set-StrictMode -Version Latest
@@ -11,6 +12,16 @@ $ErrorActionPreference = 'Stop'
 $resolvedSetupPath = (Resolve-Path -LiteralPath $SetupPath).Path
 if (-not (Test-Path -LiteralPath $resolvedSetupPath -PathType Leaf)) {
     throw "Setup executable does not exist: $SetupPath"
+}
+
+$resolvedAdditionalSmokeScript = $null
+if (-not [string]::IsNullOrWhiteSpace($AdditionalSmokeScript)) {
+    $resolvedAdditionalSmokeScript = (
+        Resolve-Path -LiteralPath $AdditionalSmokeScript
+    ).Path
+    if (-not (Test-Path -LiteralPath $resolvedAdditionalSmokeScript -PathType Leaf)) {
+        throw "Additional smoke script does not exist: $AdditionalSmokeScript"
+    }
 }
 
 $resolver = Join-Path $PSScriptRoot 'Resolve-ReleaseVersion.ps1'
@@ -60,6 +71,12 @@ try {
         throw (
             "Installed FileVersion mismatch. Expected " +
             "'$($expectedVersion.AssemblyVersion)', got '$($versionInfo.FileVersion)'.")
+    }
+
+    if ($null -ne $resolvedAdditionalSmokeScript) {
+        & $resolvedAdditionalSmokeScript `
+            -InstalledExe $exe `
+            -LockPath (Join-Path $root 'state\lock.pid')
     }
 
     Write-Host (

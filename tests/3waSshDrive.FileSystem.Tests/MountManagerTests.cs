@@ -96,6 +96,35 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
         }
 
         [TestMethod]
+        public void Dispose_UnmountFailureStillReleasesResourcesAndPreservesOriginalError()
+        {
+            var events = new List<string>();
+            var remote = new TrackingRemoteFileSystem(events);
+            var host = new TrackingFileSystemHost(
+                events,
+                0,
+                throwOnDispose: true,
+                throwOnUnmount: true);
+            var manager = new MountManager(
+                profile => remote,
+                fileSystem => host);
+
+            var mounted = manager.Mount(ValidProfile());
+            var exception = Assert.ThrowsException<IOException>(
+                () => mounted.Dispose());
+
+            Assert.AreEqual("Simulated unmount failure.", exception.Message);
+            CollectionAssert.AreEqual(new[]
+            {
+                "remote.connect",
+                "host.mount:Z:",
+                "host.unmount",
+                "host.dispose",
+                "remote.dispose"
+            }, events);
+        }
+
+        [TestMethod]
         public void MountedDrive_EnsureConnected_ReconnectsWhenDisconnected()
         {
             var events = new List<string>();
@@ -210,16 +239,19 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             private readonly IList<string> _events;
             private readonly int _mountStatus;
             private readonly bool _throwOnDispose;
+            private readonly bool _throwOnUnmount;
             private bool _disposed;
 
             public TrackingFileSystemHost(
                 IList<string> events,
                 int mountStatus,
-                bool throwOnDispose = false)
+                bool throwOnDispose = false,
+                bool throwOnUnmount = false)
             {
                 _events = events;
                 _mountStatus = mountStatus;
                 _throwOnDispose = throwOnDispose;
+                _throwOnUnmount = throwOnUnmount;
             }
 
             public int Mount(string mountPoint)
@@ -231,6 +263,8 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             public void Unmount()
             {
                 _events.Add("host.unmount");
+                if (_throwOnUnmount)
+                    throw new IOException("Simulated unmount failure.");
             }
 
             public void Dispose()

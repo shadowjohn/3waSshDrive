@@ -170,6 +170,7 @@ jobs:
           -SetupPath .\artifacts\release\3waSshDrive-Setup.exe
           -ExpectedDisplayVersion $env:THREEWA_DISPLAY_VERSION
           -ExpectedPackageVersion $env:THREEWA_PACKAGE_VERSION
+          -AdditionalSmokeScript .\scripts\Test-UpdateRestart.ps1
 
       - name: Publish verified release
         shell: pwsh

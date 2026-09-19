@@ -35,6 +35,25 @@ namespace ThreeWa.SshDrive.App.Tests
             WriteRequiredFiles(_tempDir);
             var context = ValidContext(_tempDir);
 
+            var result = SelfCheckRunner.Evaluate(context);
+
+            Assert.IsTrue(result.Success);
+            Assert.AreEqual(
+                "Version=v2026.09.19.01 Package=2026.919.1 " +
+                "UpdateMode=Installed",
+                result.Message);
+        }
+
+        [DataTestMethod]
+        [DataRow("Installed")]
+        [DataRow("Portable")]
+        [DataRow("Unmanaged")]
+        public void Evaluate_UpdateModeIsDiagnosticOnly(string updateMode)
+        {
+            WriteRequiredFiles(_tempDir);
+            var context = ValidContext(_tempDir);
+            context.UpdateMode = updateMode;
+
             Assert.IsTrue(SelfCheckRunner.Evaluate(context).Success);
         }
 
@@ -155,7 +174,8 @@ namespace ThreeWa.SshDrive.App.Tests
                 AssemblyVersion = new Version(2026, 9, 19, 1),
                 FileVersion = new Version(2026, 9, 19, 1),
                 Is64BitProcess = true,
-                VelopackBootstrapSucceeded = true
+                VelopackBootstrapSucceeded = true,
+                UpdateMode = "Installed"
             };
         }
     }

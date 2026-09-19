@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 $packager = Join-Path $PSScriptRoot '..\New-VelopackRelease.ps1'
 $assetValidator = Join-Path $PSScriptRoot '..\Test-ReleaseAssets.ps1'
 $installedReleaseTester = Join-Path $PSScriptRoot '..\Test-InstalledRelease.ps1'
+$updateRestartTester = Join-Path $PSScriptRoot '..\Test-UpdateRestart.ps1'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $releaseWorkflowPath = Join-Path $repositoryRoot '.github\workflows\windows-release.yml'
 
@@ -147,6 +148,9 @@ try {
         'ProductVersion'
         'FileVersion'
         'ExpectedPackageVersion'
+        '[string]$AdditionalSmokeScript'
+        '-InstalledExe'
+        '-LockPath'
         'finally {'
         "Join-Path `$root 'Update.exe'"
         "-ArgumentList '--silent uninstall'"
@@ -160,6 +164,27 @@ try {
     }
     if ($installedReleaseSource -match 'Assembly\.(Load|LoadFrom|LoadFile)') {
         throw 'Installed release smoke must not reflection-load the installed executable.'
+    }
+
+    $updateRestartSource = (
+        Get-Content -LiteralPath $updateRestartTester -Raw
+    ) -replace "`r`n", "`n"
+    $requiredRestartFragments = @(
+        '[string]$InstalledExe'
+        '[string]$LockPath'
+        '999999'
+        '1..2 | ForEach-Object'
+        "-ArgumentList '--self-check'"
+        '[System.IO.FileMode]::OpenOrCreate'
+        '[System.IO.FileAccess]::ReadWrite'
+        '[System.IO.FileShare]::None'
+        'Self-check was blocked by live lock handle.'
+        '$handle.Dispose()'
+    )
+    foreach ($fragment in $requiredRestartFragments) {
+        if (-not $updateRestartSource.Contains($fragment)) {
+            throw "Update restart smoke script is missing: $fragment"
+        }
     }
 
     $releaseWorkflow = (
@@ -194,6 +219,7 @@ try {
         'assets.win.json'
         '-Remote'
         '.\scripts\Test-InstalledRelease.ps1'
+        '-AdditionalSmokeScript .\scripts\Test-UpdateRestart.ps1'
         'gh release edit $env:GITHUB_REF_NAME --draft=false --latest'
         'uses: actions/upload-artifact@v4'
         'if: always()'

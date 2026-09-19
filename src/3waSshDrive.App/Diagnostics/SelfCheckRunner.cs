@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using ThreeWa.SshDrive.Core.Versioning;
+using Velopack;
+using Velopack.Sources;
 
 namespace ThreeWa.SshDrive.App.Diagnostics
 {
@@ -23,6 +25,8 @@ namespace ThreeWa.SshDrive.App.Diagnostics
         public bool Is64BitProcess { get; set; }
 
         public bool VelopackBootstrapSucceeded { get; set; }
+
+        public string UpdateMode { get; set; }
     }
 
     internal sealed class SelfCheckResult
@@ -113,7 +117,11 @@ namespace ThreeWa.SshDrive.App.Diagnostics
                 return Failure("File version does not match the display version.");
             }
 
-            return new SelfCheckResult(true, "version and required files are valid.");
+            return new SelfCheckResult(
+                true,
+                "Version=" + context.DisplayVersion +
+                " Package=" + context.PackageVersion +
+                " UpdateMode=" + context.UpdateMode);
         }
 
         internal static int RunCurrentProcess(
@@ -144,6 +152,17 @@ namespace ThreeWa.SshDrive.App.Diagnostics
 
                 Version.TryParse(fileVersionText, out var fileVersion);
 
+                var source = new GithubSource(
+                    "https://github.com/shadowjohn/3waSshDrive",
+                    accessToken: null,
+                    prerelease: false);
+                var manager = new UpdateManager(source);
+                var updateMode = manager.IsPortable
+                    ? "Portable"
+                    : manager.IsInstalled
+                        ? "Installed"
+                        : "Unmanaged";
+
                 var result = Evaluate(new SelfCheckContext
                 {
                     BaseDirectory = AppDomain.CurrentDomain.BaseDirectory,
@@ -152,12 +171,13 @@ namespace ThreeWa.SshDrive.App.Diagnostics
                     AssemblyVersion = assembly.GetName().Version,
                     FileVersion = fileVersion,
                     Is64BitProcess = Environment.Is64BitProcess,
-                    VelopackBootstrapSucceeded = velopackBootstrapSucceeded
+                    VelopackBootstrapSucceeded = velopackBootstrapSucceeded,
+                    UpdateMode = updateMode
                 });
 
                 output.WriteLine(
                     result.Success
-                        ? "SELF-CHECK OK: " + result.Message
+                        ? "SELF-CHECK OK " + result.Message
                         : "SELF-CHECK FAILED: " + result.Message);
                 return result.Success ? 0 : 1;
             }

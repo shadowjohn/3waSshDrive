@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using ThreeWa.SshDrive.App.Diagnostics;
+using ThreeWa.SshDrive.App.Updates;
 using ThreeWa.SshDrive.Core.Models;
 using ThreeWa.SshDrive.Core.Profiles;
 using ThreeWa.SshDrive.FileSystem.Mounting;
@@ -14,11 +15,13 @@ using ThreeWa.SshDrive.Sftp;
 
 namespace ThreeWa.SshDrive.App
 {
-    internal sealed class MainForm : Form
+    internal sealed partial class MainForm : Form, IUpdatePreparation
     {
         private readonly ProfileStore _profileStore;
         private readonly SshConnectionProbe _connectionProbe;
         private readonly MountManager _mountManager;
+        private readonly UpdateService _updateService;
+        private readonly UpdateCoordinator _updateCoordinator;
         private readonly Dictionary<string, MountedDrive> _mountedDrives =
             new Dictionary<string, MountedDrive>(StringComparer.OrdinalIgnoreCase);
 
@@ -45,6 +48,7 @@ namespace ThreeWa.SshDrive.App
         private readonly Button _unmountButton = new Button();
         private readonly Button _explorerButton = new Button();
         private readonly Button _installDriverButton = new Button();
+        private readonly Button _checkUpdatesButton = new Button();
         private readonly Label _statusDot = new Label();
         private readonly Label _statusTimestamp = new Label();
         private readonly NotifyIcon _notifyIcon = new NotifyIcon();
@@ -69,6 +73,8 @@ namespace ThreeWa.SshDrive.App
             "點擊我隨時聽我說話～喵～ฅ'ω'ฅ"
         };
         private bool _isExplicitExit;
+        private bool _isApplyingUpdate;
+        private bool _isCheckingUpdates;
 
         private List<DriveProfile> _profileItems = new List<DriveProfile>();
         private string _selectedProfileName;
@@ -78,18 +84,22 @@ namespace ThreeWa.SshDrive.App
             : this(
                 ProfileStore.CreateDefault(),
                 new SshConnectionProbe(),
-                new MountManager())
+                new MountManager(),
+                UpdateService.CreateDefault())
         {
         }
 
         internal MainForm(
             ProfileStore profileStore,
             SshConnectionProbe connectionProbe,
-            MountManager mountManager)
+            MountManager mountManager,
+            UpdateService updateService)
         {
             _profileStore = profileStore ?? throw new ArgumentNullException(nameof(profileStore));
             _connectionProbe = connectionProbe ?? throw new ArgumentNullException(nameof(connectionProbe));
             _mountManager = mountManager ?? throw new ArgumentNullException(nameof(mountManager));
+            _updateService = updateService ?? throw new ArgumentNullException(nameof(updateService));
+            _updateCoordinator = new UpdateCoordinator(this);
 
             Text = $"3waSshDrive - {Application.ProductVersion}";
             StartPosition = FormStartPosition.CenterScreen;
@@ -210,6 +220,23 @@ namespace ThreeWa.SshDrive.App
             ApplyRoundedRegion(aboutButton, 6);
             aboutButton.Click += (sender, args) => ShowAboutDialog();
 
+            _checkUpdatesButton.Text = "↻ 檢查更新";
+            _checkUpdatesButton.AutoSize = true;
+            _checkUpdatesButton.FlatStyle = FlatStyle.Flat;
+            _checkUpdatesButton.FlatAppearance.BorderColor =
+                Color.FromArgb(203, 213, 225);
+            _checkUpdatesButton.BackColor = Color.FromArgb(241, 245, 249);
+            _checkUpdatesButton.ForeColor = Color.FromArgb(71, 85, 105);
+            _checkUpdatesButton.Font = new Font(
+                "Segoe UI",
+                9F,
+                FontStyle.Bold);
+            _checkUpdatesButton.Cursor = Cursors.Hand;
+            _checkUpdatesButton.Height = 32;
+            _checkUpdatesButton.Padding = new Padding(10, 2, 10, 2);
+            _checkUpdatesButton.Margin = new Padding(8, 6, 0, 0);
+            ApplyRoundedRegion(_checkUpdatesButton, 6);
+
             var sloganPanel = new TableLayoutPanel
             {
                 AutoSize = true,
@@ -244,6 +271,7 @@ namespace ThreeWa.SshDrive.App
             sloganPanel.Controls.Add(slogan2, 0, 1);
 
             rightHeader.Controls.Add(aboutButton);
+            rightHeader.Controls.Add(_checkUpdatesButton);
             rightHeader.Controls.Add(sloganPanel);
             header.Controls.Add(rightHeader, 2, 0);
 
@@ -708,6 +736,10 @@ namespace ThreeWa.SshDrive.App
             _speechBubble.Click += (sender, args) => CycleMascotQuote();
             _mascotSpeech.Click += (sender, args) => CycleMascotQuote();
             _mascotName.Click += (sender, args) => CycleMascotQuote();
+            _checkUpdatesButton.Click += async (sender, args) =>
+                await CheckForUpdatesAsync(manual: true);
+            Shown += async (sender, args) =>
+                await CheckForUpdatesAsync(manual: false);
             FormClosing += OnFormClosing;
             FormClosed += (sender, args) =>
             {
@@ -891,7 +923,7 @@ namespace ThreeWa.SshDrive.App
             if (runtime.IsValid)
             {
                 _installDriverButton.Visible = false;
-                _mountButton.Enabled = !_busy;
+                _mountButton.Enabled = !_busy && !_isApplyingUpdate;
                 return true;
             }
 
@@ -918,7 +950,8 @@ namespace ThreeWa.SshDrive.App
 
         private async Task CheckAndReconnectDrivesAsync()
         {
-            if (_isReconnecting || _busy || _mountedDrives.Count == 0)
+            if (_isReconnecting || _busy || _isApplyingUpdate ||
+                _mountedDrives.Count == 0)
                 return;
 
             var disconnected = _mountedDrives.Values.Where(d => !d.IsConnected).ToList();
@@ -1061,7 +1094,7 @@ namespace ThreeWa.SshDrive.App
 
         private async Task RunBusyAsync(Func<Task> operation)
         {
-            if (_busy)
+            if (_busy || _isApplyingUpdate)
                 return;
 
             SetBusy(true);
@@ -1096,18 +1129,24 @@ namespace ThreeWa.SshDrive.App
         private void SetBusy(bool busy)
         {
             _busy = busy;
-            UseWaitCursor = busy;
-            _testButton.Enabled = !busy;
-            _unmountButton.Enabled = !busy;
-            _saveButton.Enabled = !busy;
-            _deleteButton.Enabled = !busy;
-            _authenticationMode.Enabled = !busy;
-            _installDriverButton.Enabled = !busy;
-            _readOnly.Enabled = !busy;
+            var actionsDisabled = busy || _isApplyingUpdate;
+            UseWaitCursor = actionsDisabled;
+            _profiles.Enabled = !actionsDisabled;
+            _newButton.Enabled = !actionsDisabled;
+            _testButton.Enabled = !actionsDisabled;
+            _unmountButton.Enabled = !actionsDisabled;
+            _saveButton.Enabled = !actionsDisabled;
+            _deleteButton.Enabled = !actionsDisabled;
+            _explorerButton.Enabled = !actionsDisabled;
+            _authenticationMode.Enabled = !actionsDisabled;
+            _installDriverButton.Enabled = !actionsDisabled;
+            _checkUpdatesButton.Enabled =
+                !actionsDisabled && !_isCheckingUpdates;
+            _readOnly.Enabled = !actionsDisabled;
 
             var runtime = WinFspRuntimePreflight.CheckX64();
-            _testAndMountButton.Enabled = !busy && runtime.IsValid;
-            _mountButton.Enabled = !busy && runtime.IsValid;
+            _testAndMountButton.Enabled = !actionsDisabled && runtime.IsValid;
+            _mountButton.Enabled = !actionsDisabled && runtime.IsValid;
             _installDriverButton.Visible = !runtime.IsValid;
 
             UpdateAuthenticationControls();
@@ -1230,9 +1269,10 @@ namespace ThreeWa.SshDrive.App
         {
             var usingPrivateKey =
                 SelectedAuthenticationMode() == AuthenticationMode.PrivateKey;
-            _privateKeyPath.Enabled = usingPrivateKey && !_busy;
-            _browseButton.Enabled = usingPrivateKey && !_busy;
-            _password.Enabled = !usingPrivateKey && !_busy;
+            var actionsEnabled = !_busy && !_isApplyingUpdate;
+            _privateKeyPath.Enabled = usingPrivateKey && actionsEnabled;
+            _browseButton.Enabled = usingPrivateKey && actionsEnabled;
+            _password.Enabled = !usingPrivateKey && actionsEnabled;
         }
 
         private bool IsMounted(string driveLetter)
@@ -1269,10 +1309,18 @@ namespace ThreeWa.SshDrive.App
             var showItem = new ToolStripMenuItem("展開視窗");
             showItem.Click += (sender, args) => RestoreFromTray();
 
+            var updateItem = new ToolStripMenuItem("檢查更新");
+            updateItem.Click += async (sender, args) =>
+            {
+                RestoreFromTray();
+                await CheckForUpdatesAsync(manual: true);
+            };
+
             var quitItem = new ToolStripMenuItem("離開 (QUIT)");
             quitItem.Click += (sender, args) => ExitApplication();
 
             menu.Items.Add(showItem);
+            menu.Items.Add(updateItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(quitItem);
 
