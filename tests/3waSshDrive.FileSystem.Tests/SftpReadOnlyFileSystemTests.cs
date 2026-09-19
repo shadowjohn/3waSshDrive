@@ -46,7 +46,7 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             var openStatus = fileSystem.Open(
                 @"\README.md",
                 0,
-                0,
+                0x0001,
                 out var fileNode,
                 out var fileDesc,
                 out var fileInfo,
@@ -89,7 +89,7 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
                 Encoding.UTF8.GetBytes("ok"));
             var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
             fileSystem.Open(
-                @"\small.txt", 0, 0,
+                @"\small.txt", 0, 0x0001,
                 out var node, out var desc, out var info, out var name);
             var buffer = Marshal.AllocHGlobal(1);
 
@@ -216,7 +216,6 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
                 Assert.AreEqual(FileSystemBase.STATUS_SUCCESS, writeStatus);
                 Assert.AreEqual((uint)textBytes.Length, bytesTransferred);
                 Assert.AreEqual((ulong)textBytes.Length, fileInfo.FileSize);
-
                 fileSystem.Flush(fileNode, fileDesc, out _);
             }
             finally
@@ -252,6 +251,28 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             Assert.IsTrue(remote.Exists("/home/dev/subfolder"));
             Assert.IsTrue(remote.GetEntry("/home/dev/subfolder").IsDirectory);
             fileSystem.Close(fileNode, fileDesc);
+        }
+
+        [TestMethod]
+        public void Open_MetadataOnly_DoesNotCreateSftpFileHandle()
+        {
+            var remote = new FakeRemoteFileSystem();
+            remote.AddEntry(File("metadata.txt", "/home/dev/metadata.txt", 4), Encoding.UTF8.GetBytes("test"));
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
+
+            var status = fileSystem.Open(
+                @"\metadata.txt",
+                0,
+                0x0080,
+                out var fileNode,
+                out var fileDesc,
+                out _,
+                out _);
+
+            Assert.AreEqual(FileSystemBase.STATUS_SUCCESS, status);
+            Assert.AreEqual(0, remote.ActiveStreamCount);
+            fileSystem.Close(fileNode, fileDesc);
+            Assert.AreEqual(0, remote.StreamDisposeAttemptCount);
         }
 
         [TestMethod]

@@ -49,9 +49,23 @@ namespace ThreeWa.SshDrive.FileSystem
         private CacheItem<RemoteVolumeInfo> _volumeInfoCache;
         private readonly object _volumeInfoLock = new object();
 
+        private const uint FILE_READ_DATA = 0x0001;
         private const uint FILE_WRITE_DATA = 0x0002;
         private const uint FILE_APPEND_DATA = 0x0004;
+        private const uint FILE_EXECUTE = 0x0020;
+        private const uint GENERIC_READ = 0x80000000;
         private const uint GENERIC_WRITE = 0x40000000;
+        private const uint GENERIC_EXECUTE = 0x20000000;
+        private const uint GENERIC_ALL = 0x10000000;
+        private const uint DataAccessMask =
+            FILE_READ_DATA |
+            FILE_WRITE_DATA |
+            FILE_APPEND_DATA |
+            FILE_EXECUTE |
+            GENERIC_READ |
+            GENERIC_WRITE |
+            GENERIC_EXECUTE |
+            GENERIC_ALL;
 
         private readonly IRemoteFileSystem _remote;
         private readonly string _remoteRoot;
@@ -307,7 +321,7 @@ namespace ThreeWa.SshDrive.FileSystem
                 var entry = GetCachedEntry(mappedPath);
                 Stream stream = null;
 
-                if (!entry.IsDirectory)
+                if (!entry.IsDirectory && RequiresDataStream(grantedAccess))
                 {
                     stream = !ReadOnly
                         ? _remote.OpenFile(entry.FullPath, FileMode.Open, FileAccess.ReadWrite)
@@ -438,6 +452,8 @@ namespace ThreeWa.SshDrive.FileSystem
                 var handle = (RemoteFileHandle)fileDesc;
                 if (handle.Entry.IsDirectory)
                     return STATUS_FILE_IS_A_DIRECTORY;
+                if (handle.Stream == null)
+                    return STATUS_ACCESS_DENIED;
                 if (offset >= (ulong)handle.Entry.Length)
                     return STATUS_END_OF_FILE;
 
@@ -492,6 +508,8 @@ namespace ThreeWa.SshDrive.FileSystem
                 var handle = (RemoteFileHandle)fileDesc;
                 if (handle.Entry.IsDirectory)
                     return STATUS_FILE_IS_A_DIRECTORY;
+                if (handle.Stream == null)
+                    return STATUS_ACCESS_DENIED;
 
                 var bytes = new byte[length];
                 Marshal.Copy(buffer, bytes, 0, (int)length);
@@ -519,7 +537,10 @@ namespace ThreeWa.SshDrive.FileSystem
 
                     handle.Stream.Write(bytes, 0, (int)length);
 
-                    var newLength = handle.Stream.Length;
+                    // SftpFileStream.Length flushes and then performs SSH_FXP_FSTAT.
+                    // The completed write already gives us its final position, so avoid
+                    // an extra remote round-trip for every WinFsp write request.
+                    var newLength = Math.Max(handle.Entry.Length, handle.Stream.Position);
                     if (newLength != handle.Entry.Length)
                     {
                         handle.Entry = new RemoteEntry(
@@ -587,6 +608,8 @@ namespace ThreeWa.SshDrive.FileSystem
                 var handle = (RemoteFileHandle)fileDesc;
                 if (handle.Entry.IsDirectory)
                     return STATUS_FILE_IS_A_DIRECTORY;
+                if (handle.Stream == null)
+                    return STATUS_ACCESS_DENIED;
 
                 lock (_remote.SyncRoot)
                 {
@@ -806,6 +829,11 @@ namespace ThreeWa.SshDrive.FileSystem
             }
 
             return entries.Count;
+        }
+
+        private static bool RequiresDataStream(uint grantedAccess)
+        {
+            return (grantedAccess & DataAccessMask) != 0;
         }
 
         private string MapPath(string fileName)
