@@ -9,8 +9,10 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
     public static class WinFspInstaller
     {
         public const string PackageId = "WinFsp.WinFsp";
+        public const string WinFspVersion = "2.1.25156";
         public const string DefaultArguments =
-            "install WinFsp.WinFsp --accept-source-agreements --accept-package-agreements";
+            "install --id WinFsp.WinFsp --version 2.1.25156 --exact --source winget " +
+            "--accept-source-agreements --accept-package-agreements";
 
         public static ProcessStartInfo CreateProcessStartInfo(string arguments = DefaultArguments)
         {

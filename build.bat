@@ -4,6 +4,10 @@ setlocal EnableExtensions
 set "PROJECT_ROOT=%~dp0"
 set "NO_PAUSE="
 if /I "%~1"=="--no-pause" set "NO_PAUSE=1"
+set "MSBUILD_VERSION_ARGS="
+if defined THREEWA_DISPLAY_VERSION if defined THREEWA_PACKAGE_VERSION if defined THREEWA_ASSEMBLY_VERSION (
+    set "MSBUILD_VERSION_ARGS=/p:ThreeWaDisplayVersion=%THREEWA_DISPLAY_VERSION% /p:ThreeWaPackageVersion=%THREEWA_PACKAGE_VERSION% /p:ThreeWaAssemblyVersion=%THREEWA_ASSEMBLY_VERSION%"
+)
 
 pushd "%PROJECT_ROOT%" >nul || goto :failed
 
@@ -28,11 +32,11 @@ dotnet restore ".\3waSshDrive.sln" --nologo
 if errorlevel 1 goto :failed
 
 echo [3waSshDrive] Running Release tests...
-dotnet test ".\3waSshDrive.sln" --configuration Release --no-restore --nologo
+dotnet test ".\3waSshDrive.sln" --configuration Release --no-restore --nologo --logger "console;verbosity=normal" %MSBUILD_VERSION_ARGS%
 if errorlevel 1 goto :failed
 
 echo [3waSshDrive] Building the WinForms application...
-dotnet build ".\src\3waSshDrive.App\3waSshDrive.App.csproj" --configuration Release --no-restore --nologo
+dotnet build ".\src\3waSshDrive.App\3waSshDrive.App.csproj" --configuration Release --no-restore --nologo %MSBUILD_VERSION_ARGS%
 if errorlevel 1 goto :failed
 
 echo.

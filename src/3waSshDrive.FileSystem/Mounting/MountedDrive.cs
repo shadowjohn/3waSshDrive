@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.ExceptionServices;
 using ThreeWa.SshDrive.Core.Remote;
 
 namespace ThreeWa.SshDrive.FileSystem.Mounting
@@ -41,21 +42,47 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
                 return;
 
             _disposed = true;
+            ExceptionDispatchInfo failure = null;
             try
             {
-                _host.Unmount();
+                try
+                {
+                    _host.Unmount();
+                }
+                catch (Exception exception)
+                {
+                    failure = ExceptionDispatchInfo.Capture(exception);
+                }
             }
             finally
             {
                 try
                 {
-                    _host.Dispose();
+                    try
+                    {
+                        _host.Dispose();
+                    }
+                    catch (Exception exception)
+                    {
+                        if (failure == null)
+                            failure = ExceptionDispatchInfo.Capture(exception);
+                    }
                 }
                 finally
                 {
-                    _remote.Dispose();
+                    try
+                    {
+                        _remote.Dispose();
+                    }
+                    catch (Exception exception)
+                    {
+                        if (failure == null)
+                            failure = ExceptionDispatchInfo.Capture(exception);
+                    }
                 }
             }
+
+            failure?.Throw();
         }
     }
 }

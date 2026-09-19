@@ -17,7 +17,10 @@ if not exist "%APP_PATH%" (
 )
 
 if /I "%~1"=="--check" (
-    echo [3waSshDrive] Ready: %APP_PATH%
+    echo [3waSshDrive] Running self-check: %APP_PATH%
+    start "" /wait "%APP_PATH%" --self-check
+    if errorlevel 1 goto :failed
+    echo [3waSshDrive] Self-check passed.
     exit /b 0
 )
 
