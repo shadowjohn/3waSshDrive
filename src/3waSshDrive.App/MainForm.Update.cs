@@ -27,16 +27,55 @@ namespace ThreeWa.SshDrive.App
 
             _isCheckingUpdates = true;
             _checkUpdatesButton.Enabled = false;
+
+            CheckingUpdateDialog loadingDialog = null;
+            var cts = new CancellationTokenSource();
+
             try
             {
+                UpdateCheckResult result;
                 if (manual)
+                {
                     SetStatus("正在檢查更新…");
+                    SetMascotSpeech("正在檢查有沒有新版本喔～芳寶搜尋中…🔍✨");
 
-                var result = await session.CheckAsync(CancellationToken.None);
+                    loadingDialog = new CheckingUpdateDialog(cts);
+                    loadingDialog.Show(this);
+                    loadingDialog.Refresh();
+
+                    var checkTask = session.CheckAsync(cts.Token);
+                    var minDelayTask = Task.Delay(800, cts.Token);
+                    await Task.WhenAll(checkTask, minDelayTask);
+                    result = await checkTask;
+                }
+                else
+                {
+                    result = await session.CheckAsync(CancellationToken.None);
+                }
+
+                if (loadingDialog != null && !loadingDialog.IsDisposed)
+                {
+                    loadingDialog.Close();
+                    loadingDialog.Dispose();
+                    loadingDialog = null;
+                }
+
                 if (result.Kind == UpdateCheckKind.Available)
                 {
+                    if (manual)
+                        SetMascotSpeech($"發現新版本 {result.Package.TargetDisplayVersion}！快來看看有什麼新功能吧～🎉");
                     ShowUpdateDialog(session, result.Package);
                     return;
+                }
+
+                if (manual)
+                {
+                    if (result.Kind == UpdateCheckKind.UpToDate)
+                        SetMascotSpeech("太棒了！目前已經是最新版本囉～芳寶隨時為你待命！💪✨");
+                    else if (result.Kind == UpdateCheckKind.Disabled)
+                        SetMascotSpeech("這是免安裝 (Portable) 版本喔～如需自動更新可下載安裝版！📦");
+                    else if (result.Kind == UpdateCheckKind.Failed)
+                        SetMascotSpeech("檢查更新時遇到一點狀況…請稍後再試一次看看喔！🐾");
                 }
 
                 if (!UpdateNotificationPolicy.ShouldShowMessage(
@@ -48,6 +87,14 @@ namespace ThreeWa.SshDrive.App
 
                 ShowUpdateCheckResult(result);
             }
+            catch (OperationCanceledException)
+            {
+                if (manual)
+                {
+                    SetStatus("已取消檢查更新。");
+                    SetMascotSpeech("好喔，已經幫你取消檢查更新囉～☕");
+                }
+            }
             catch (Exception exception)
             {
                 UpdateLog.Default.Failure(
@@ -56,6 +103,7 @@ namespace ThreeWa.SshDrive.App
                     exception.HResult);
                 if (manual)
                 {
+                    SetMascotSpeech("檢查更新失敗，請稍後再試一次喔！🐾");
                     ShowUpdateMessage(
                         "無法檢查更新，請稍後再試。",
                         MessageBoxIcon.Warning);
@@ -63,6 +111,12 @@ namespace ThreeWa.SshDrive.App
             }
             finally
             {
+                if (loadingDialog != null && !loadingDialog.IsDisposed)
+                {
+                    loadingDialog.Close();
+                    loadingDialog.Dispose();
+                }
+                cts.Dispose();
                 session.Dispose();
                 _isCheckingUpdates = false;
                 if (!IsDisposed && !Disposing)

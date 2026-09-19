@@ -1630,6 +1630,45 @@ namespace ThreeWa.SshDrive.App
             return null;
         }
 
+        internal static Image LoadLoadingMascotImage()
+        {
+            try
+            {
+                var assembly = typeof(MainForm).Assembly;
+                using (var stream = assembly.GetManifestResourceStream("ThreeWa.SshDrive.App.Assets.mascot_loading.jpg"))
+                {
+                    if (stream != null)
+                        return Image.FromStream(stream);
+                }
+            }
+            catch
+            {
+            }
+
+            var candidates = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "mascot_loading.jpg"),
+                System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(MainForm).Assembly.Location) ?? "", "Assets", "mascot_loading.jpg"),
+                @"D:\mytools\3waSshDrive\src\3waSshDrive.App\Assets\mascot_loading.jpg"
+            };
+
+            foreach (var path in candidates)
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    try
+                    {
+                        return Image.FromFile(path);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+
+            return LoadMascotImage();
+        }
+
         private static Image LoadBackgroundImage()
         {
             var extensions = new[] { "jpg", "png" };
@@ -1707,7 +1746,7 @@ namespace ThreeWa.SshDrive.App
             return null;
         }
 
-        private static GraphicsPath CreateRoundedRectanglePath(Rectangle bounds, int radius)
+        internal static GraphicsPath CreateRoundedRectanglePath(Rectangle bounds, int radius)
         {
             var path = new GraphicsPath();
             if (radius <= 0 || bounds.Width <= 0 || bounds.Height <= 0)
@@ -1729,7 +1768,7 @@ namespace ThreeWa.SshDrive.App
             return path;
         }
 
-        private static void ApplyRoundedRegion(Control control, int radius, Color borderColor = default(Color))
+        internal static void ApplyRoundedRegion(Control control, int radius, Color borderColor = default(Color))
         {
             void Update()
             {

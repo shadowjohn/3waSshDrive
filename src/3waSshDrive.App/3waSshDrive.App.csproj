@@ -50,12 +50,15 @@
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\background.png"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\mascot_loading.jpg"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Assets\mascot.jpg" />
     <EmbeddedResource Include="Assets\app.ico" />
     <EmbeddedResource Include="Assets\header_logo.png" />
     <EmbeddedResource Include="Assets\mascot_card.png" />
+    <EmbeddedResource Include="Assets\mascot_loading.jpg" />
     <EmbeddedResource Include="Assets\background.jpg" />
     <EmbeddedResource Include="Assets\background.png" />
   </ItemGroup>
