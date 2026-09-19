@@ -8,6 +8,7 @@ $packager = Join-Path $PSScriptRoot '..\New-VelopackRelease.ps1'
 $assetValidator = Join-Path $PSScriptRoot '..\Test-ReleaseAssets.ps1'
 $installedReleaseTester = Join-Path $PSScriptRoot '..\Test-InstalledRelease.ps1'
 $updateRestartTester = Join-Path $PSScriptRoot '..\Test-UpdateRestart.ps1'
+$installedLayoutResolver = Join-Path $PSScriptRoot '..\Get-InstalledReleaseLayout.ps1'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $releaseWorkflowPath = Join-Path $repositoryRoot '.github\workflows\windows-release.yml'
 $packagerSource = (
@@ -67,6 +68,45 @@ try {
     New-Item -ItemType Directory -Path $buildDirectory -Force | Out-Null
     Set-Content -LiteralPath $releaseNotes -Value 'Release test notes.'
     Remove-Item Env:VELOPACK_SIGN_PARAMS -ErrorAction SilentlyContinue
+
+    $installRoot = Join-Path $testRoot 'installed'
+    $currentDirectory = Join-Path $installRoot 'current'
+    New-Item -ItemType Directory -Path $currentDirectory -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $installRoot '3waSshDrive.exe') `
+        -Value 'Velopack execution stub'
+    Set-Content -LiteralPath (Join-Path $installRoot 'Update.exe') `
+        -Value 'Velopack updater'
+
+    $missingCurrentError = $null
+    try {
+        if (Test-Path -LiteralPath $installedLayoutResolver -PathType Leaf) {
+            & $installedLayoutResolver `
+                -InstallRoot $installRoot `
+                -MainExeName '3waSshDrive.exe'
+        }
+        else {
+            throw 'Installed release layout resolver is missing.'
+        }
+    }
+    catch {
+        $missingCurrentError = $_.Exception.Message
+    }
+    if ($missingCurrentError -notmatch 'Installed application executable missing') {
+        throw (
+            'The root Velopack execution stub must not be treated as the installed ' +
+            "application. Actual error: $missingCurrentError")
+    }
+
+    $expectedApplicationExe = Join-Path $currentDirectory '3waSshDrive.exe'
+    Set-Content -LiteralPath $expectedApplicationExe -Value 'Installed application'
+    $layout = & $installedLayoutResolver `
+        -InstallRoot $installRoot `
+        -MainExeName '3waSshDrive.exe'
+    if ($layout.ApplicationExe -ne (Resolve-Path -LiteralPath $expectedApplicationExe).Path) {
+        throw (
+            "Expected installed application '$expectedApplicationExe', got " +
+            "'$($layout.ApplicationExe)'.")
+    }
 
     $unsignedArguments = @(& $packager `
         -BuildDirectory $buildDirectory `
@@ -158,7 +198,8 @@ try {
         "Join-Path `$env:LOCALAPPDATA '3waSshDrive'"
         'Install root already exists:'
         "-ArgumentList '--silent'"
-        "Join-Path `$root '3waSshDrive.exe'"
+        'Get-InstalledReleaseLayout.ps1'
+        '$layout.ApplicationExe'
         "-ArgumentList '--self-check'"
         '[System.Diagnostics.FileVersionInfo]::GetVersionInfo'
         'ProductVersion'
