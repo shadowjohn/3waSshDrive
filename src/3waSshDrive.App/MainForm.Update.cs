@@ -11,6 +11,13 @@ namespace ThreeWa.SshDrive.App
     {
         private async Task CheckForUpdatesAsync(bool manual)
         {
+            if (_updateActivityGate.IsPreparing || _isApplyingUpdate)
+            {
+                if (manual)
+                    SetStatus("更新準備尚未完成，請稍後再試。");
+                return;
+            }
+
             if (!_updateService.TryBeginSession(out var session))
             {
                 if (manual)
@@ -139,11 +146,38 @@ namespace ThreeWa.SshDrive.App
         async Task<UpdatePreparationResult> IUpdatePreparation.PrepareAsync(
             TimeSpan timeout)
         {
+            if (!_updateActivityGate.TryBeginPreparation(
+                out var preparationLease))
+            {
+                return UpdatePreparationResult.Blocked(
+                    "另一個更新準備仍在進行中，已取消這次更新。",
+                    canResumeImmediately: false);
+            }
+
+            _updatePreparationLease = preparationLease;
             _isApplyingUpdate = true;
-            SetBusy(true);
+            RefreshActionState();
             _reconnectTimer.Stop();
 
             var deadline = DateTime.UtcNow + timeout;
+            var pendingActivity = _updateActivityGate.WaitForIdleAsync();
+            if (!pendingActivity.IsCompleted)
+            {
+                var activityRemaining = deadline - DateTime.UtcNow;
+                if (activityRemaining <= TimeSpan.Zero ||
+                    await Task.WhenAny(
+                        pendingActivity,
+                        Task.Delay(activityRemaining)) != pendingActivity)
+                {
+                    ResumeWhenActivityCompletes(pendingActivity);
+                    return UpdatePreparationResult.Blocked(
+                        "目前操作尚未完成，已取消更新；目前版本不會被替換。",
+                        canResumeImmediately: false);
+                }
+
+                await pendingActivity;
+            }
+
             foreach (var pair in _mountedDrives.ToList())
             {
                 var disposeTask = Task.Run(() => pair.Value.Dispose());
@@ -220,11 +254,23 @@ namespace ThreeWa.SshDrive.App
             }
         }
 
+        private async void ResumeWhenActivityCompletes(Task pendingActivity)
+        {
+            await pendingActivity;
+            if (IsDisposed || Disposing)
+                return;
+
+            ResumeAfterFailure();
+        }
+
         private void ResumeAfterFailure()
         {
             _isExplicitExit = false;
             _isApplyingUpdate = false;
-            SetBusy(false);
+            var preparationLease = _updatePreparationLease;
+            _updatePreparationLease = null;
+            preparationLease?.Dispose();
+            RefreshActionState();
             RefreshDriveLetters();
             if (!IsDisposed && !Disposing)
                 _reconnectTimer.Start();

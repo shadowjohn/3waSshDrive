@@ -22,6 +22,8 @@ namespace ThreeWa.SshDrive.App
         private readonly MountManager _mountManager;
         private readonly UpdateService _updateService;
         private readonly UpdateCoordinator _updateCoordinator;
+        private readonly UpdateActivityGate _updateActivityGate =
+            new UpdateActivityGate();
         private readonly Dictionary<string, MountedDrive> _mountedDrives =
             new Dictionary<string, MountedDrive>(StringComparer.OrdinalIgnoreCase);
 
@@ -75,6 +77,7 @@ namespace ThreeWa.SshDrive.App
         private bool _isExplicitExit;
         private bool _isApplyingUpdate;
         private bool _isCheckingUpdates;
+        private IDisposable _updatePreparationLease;
 
         private List<DriveProfile> _profileItems = new List<DriveProfile>();
         private string _selectedProfileName;
@@ -953,45 +956,52 @@ namespace ThreeWa.SshDrive.App
             if (_isReconnecting || _busy || _isApplyingUpdate ||
                 _mountedDrives.Count == 0)
                 return;
-
-            var disconnected = _mountedDrives.Values.Where(d => !d.IsConnected).ToList();
-            if (disconnected.Count == 0)
+            if (!_updateActivityGate.TryBeginActivity(out var activity))
                 return;
 
-            _isReconnecting = true;
-            try
+            using (activity)
             {
-                foreach (var drive in disconnected)
+                var disconnected = _mountedDrives.Values
+                    .Where(drive => !drive.IsConnected)
+                    .ToList();
+                if (disconnected.Count == 0)
+                    return;
+
+                _isReconnecting = true;
+                try
                 {
-                    SetStatus($"磁碟機 {drive.DriveLetter} 連線中斷，正在自動重新連線…", false);
-                    SetMascotSpeech($"偵測到 {drive.DriveLetter} 槽連線中斷，芳寶正在重新連線中…⏳");
-
-                    try
+                    foreach (var drive in disconnected)
                     {
-                        await Task.Run(() => drive.EnsureConnected());
-                        SetStatus($"Mounted at {drive.DriveLetter}", true);
-                        SetMascotSpeech($"已成功自動重新連線至 {drive.DriveLetter} 槽！繼續工作吧～✨");
-                        RefreshDriveLetters();
+                        SetStatus($"磁碟機 {drive.DriveLetter} 連線中斷，正在自動重新連線…", false);
+                        SetMascotSpeech($"偵測到 {drive.DriveLetter} 槽連線中斷，芳寶正在重新連線中…⏳");
 
-                        if (!Visible)
+                        try
                         {
-                            _notifyIcon.ShowBalloonTip(
-                                3000,
-                                "3waSshDrive - 自動重新連線",
-                                $"磁碟機 {drive.DriveLetter} 已成功自動重新連線！",
-                                ToolTipIcon.Info);
+                            await Task.Run(() => drive.EnsureConnected());
+                            SetStatus($"Mounted at {drive.DriveLetter}", true);
+                            SetMascotSpeech($"已成功自動重新連線至 {drive.DriveLetter} 槽！繼續工作吧～✨");
+                            RefreshDriveLetters();
+
+                            if (!Visible)
+                            {
+                                _notifyIcon.ShowBalloonTip(
+                                    3000,
+                                    "3waSshDrive - 自動重新連線",
+                                    $"磁碟機 {drive.DriveLetter} 已成功自動重新連線！",
+                                    ToolTipIcon.Info);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            SetStatus($"磁碟機 {drive.DriveLetter} 重新連線失敗，等待下次重試…", false);
+                            CrashLogger.Log("AutoReconnect", ex);
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        SetStatus($"磁碟機 {drive.DriveLetter} 重新連線失敗，等待下次重試…", false);
-                        CrashLogger.Log("AutoReconnect", ex);
-                    }
                 }
-            }
-            finally
-            {
-                _isReconnecting = false;
+                finally
+                {
+                    _isReconnecting = false;
+                }
             }
         }
 
@@ -1096,20 +1106,25 @@ namespace ThreeWa.SshDrive.App
         {
             if (_busy || _isApplyingUpdate)
                 return;
+            if (!_updateActivityGate.TryBeginActivity(out var activity))
+                return;
 
-            SetBusy(true);
-            try
+            using (activity)
             {
-                await operation();
-            }
-            catch (Exception exception)
-            {
-                ShowError(exception);
-                SetMascotSpeech("嗚哇！操作好像遇到問題了，請檢查設定或網路喔＞＜");
-            }
-            finally
-            {
-                SetBusy(false);
+                SetBusy(true);
+                try
+                {
+                    await operation();
+                }
+                catch (Exception exception)
+                {
+                    ShowError(exception);
+                    SetMascotSpeech("嗚哇！操作好像遇到問題了，請檢查設定或網路喔＞＜");
+                }
+                finally
+                {
+                    SetBusy(false);
+                }
             }
         }
 
@@ -1129,7 +1144,12 @@ namespace ThreeWa.SshDrive.App
         private void SetBusy(bool busy)
         {
             _busy = busy;
-            var actionsDisabled = busy || _isApplyingUpdate;
+            RefreshActionState();
+        }
+
+        private void RefreshActionState()
+        {
+            var actionsDisabled = _busy || _isApplyingUpdate;
             UseWaitCursor = actionsDisabled;
             _profiles.Enabled = !actionsDisabled;
             _newButton.Enabled = !actionsDisabled;
