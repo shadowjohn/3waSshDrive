@@ -47,10 +47,10 @@ try {
         throw "Setup failed: $($setup.ExitCode)"
     }
 
-    $exe = Join-Path $root '3waSshDrive.exe'
-    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
-        throw "Installed executable missing: $exe"
-    }
+    $layout = & (Join-Path $PSScriptRoot 'Get-InstalledReleaseLayout.ps1') `
+        -InstallRoot $root `
+        -MainExeName '3waSshDrive.exe'
+    $exe = $layout.ApplicationExe
 
     $check = Start-Process `
         -FilePath $exe `
