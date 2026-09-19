@@ -149,9 +149,34 @@ if (-not (Test-Path -LiteralPath $vpkPath -PathType Leaf)) {
         -FailureMessage 'vpk install failed.'
 }
 
-$versionOutput = (& $vpkPath --version | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $versionOutput -notmatch '^1\.2\.0(?:\+.*)?$') {
-    throw "Unexpected vpk version: $versionOutput"
+$toolListArguments = @(
+    'tool'; 'list'
+    '--tool-path'; $toolsDirectory
+    '--format'; 'json'
+)
+$toolListOutput = (& dotnet @toolListArguments | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to inspect installed dotnet tools. Exit code: $LASTEXITCODE"
+}
+
+try {
+    $toolList = $toolListOutput | ConvertFrom-Json
+}
+catch {
+    throw 'Unable to parse the installed dotnet tool list.'
+}
+
+$installedVpk = @($toolList.data | Where-Object {
+        $_.packageId -eq 'vpk'
+    })
+if ($installedVpk.Count -ne 1 -or $installedVpk[0].version -ne '1.2.0') {
+    $installedVersion = if ($installedVpk.Count -eq 1) {
+        $installedVpk[0].version
+    }
+    else {
+        'missing or duplicated'
+    }
+    throw "Unexpected vpk version: $installedVersion"
 }
 
 $repositoryName = Get-RepositoryName -Url $RepositoryUrl

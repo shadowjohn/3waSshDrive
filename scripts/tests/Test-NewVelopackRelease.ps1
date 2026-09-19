@@ -10,6 +10,22 @@ $installedReleaseTester = Join-Path $PSScriptRoot '..\Test-InstalledRelease.ps1'
 $updateRestartTester = Join-Path $PSScriptRoot '..\Test-UpdateRestart.ps1'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $releaseWorkflowPath = Join-Path $repositoryRoot '.github\workflows\windows-release.yml'
+$packagerSource = (
+    Get-Content -LiteralPath $packager -Raw
+) -replace "`r`n", "`n"
+
+foreach ($fragment in @(
+    "'tool'; 'list'"
+    "'--format'; 'json'"
+    "`$_.packageId -eq 'vpk'"
+)) {
+    if (-not $packagerSource.Contains($fragment)) {
+        throw "Velopack packager version check is missing: $fragment"
+    }
+}
+if ($packagerSource.Contains('& $vpkPath --version')) {
+    throw 'Velopack 1.2.0 does not support the vpk --version switch.'
+}
 
 function Assert-ContainsArgument {
     param(
