@@ -130,7 +130,8 @@ $runScript = Get-Content -LiteralPath (Join-Path $repositoryRoot 'run.bat') -Raw
 foreach ($requiredBuildFragment in @(
     'set "MSBUILD_VERSION_ARGS="',
     'if defined THREEWA_DISPLAY_VERSION if defined THREEWA_PACKAGE_VERSION if defined THREEWA_ASSEMBLY_VERSION (',
-    'set "MSBUILD_VERSION_ARGS=/p:ThreeWaDisplayVersion=%THREEWA_DISPLAY_VERSION% /p:ThreeWaPackageVersion=%THREEWA_PACKAGE_VERSION% /p:ThreeWaAssemblyVersion=%THREEWA_ASSEMBLY_VERSION%"'
+    'set "MSBUILD_VERSION_ARGS=/p:ThreeWaDisplayVersion=%THREEWA_DISPLAY_VERSION% /p:ThreeWaPackageVersion=%THREEWA_PACKAGE_VERSION% /p:ThreeWaAssemblyVersion=%THREEWA_ASSEMBLY_VERSION%"',
+    '--logger "console;verbosity=normal"'
 )) {
     if (-not $buildScript.Contains($requiredBuildFragment)) {
         throw "build.bat is missing version injection: $requiredBuildFragment"

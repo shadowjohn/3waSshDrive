@@ -32,7 +32,7 @@ dotnet restore ".\3waSshDrive.sln" --nologo
 if errorlevel 1 goto :failed
 
 echo [3waSshDrive] Running Release tests...
-dotnet test ".\3waSshDrive.sln" --configuration Release --no-restore --nologo %MSBUILD_VERSION_ARGS%
+dotnet test ".\3waSshDrive.sln" --configuration Release --no-restore --nologo --logger "console;verbosity=normal" %MSBUILD_VERSION_ARGS%
 if errorlevel 1 goto :failed
 
 echo [3waSshDrive] Building the WinForms application...
