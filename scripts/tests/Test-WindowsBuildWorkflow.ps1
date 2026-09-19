@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $workflowPath = Join-Path $repositoryRoot '.github\workflows\windows-build.yml'
-$workflow = Get-Content -LiteralPath $workflowPath -Raw
+$workflow = (Get-Content -LiteralPath $workflowPath -Raw) -replace "`r`n", "`n"
 
 $requiredFragments = @(
     "permissions:`n  contents: read",
