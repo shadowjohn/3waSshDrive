@@ -123,6 +123,7 @@ jobs:
           elseif (($existingOutput | Out-String) -notmatch 'release not found') {
             throw "Unable to inspect release '$env:GITHUB_REF_NAME': $existingOutput"
           }
+          $global:LASTEXITCODE = 0
 
       - name: Upload Velopack draft assets
         shell: pwsh

@@ -232,6 +232,7 @@ try {
         '.\scripts\Test-ReleaseAssets.ps1'
         'gh release view $env:GITHUB_REF_NAME --json isDraft,assets'
         '$PSNativeCommandUseErrorActionPreference = $false'
+        '$global:LASTEXITCODE = 0'
         'gh release delete-asset'
         '.\.tools\vpk.exe upload github'
         '--merge'
