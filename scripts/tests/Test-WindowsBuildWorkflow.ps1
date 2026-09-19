@@ -14,6 +14,8 @@ $requiredFragments = @(
     'run: .\scripts\tests\Test-ReleaseVersion.ps1',
     '- name: Test portable package script',
     'run: .\scripts\tests\Test-NewPortablePackage.ps1',
+    '- name: Test Velopack release scripts',
+    'run: .\scripts\tests\Test-NewVelopackRelease.ps1',
     '- name: Test Windows build workflow contract',
     'run: .\scripts\tests\Test-WindowsBuildWorkflow.ps1',
     'run: call build.bat --no-pause',
@@ -43,6 +45,7 @@ foreach ($fragment in $requiredFragments) {
 $orderedStepNames = @(
     '- name: Test release version script',
     '- name: Test portable package script',
+    '- name: Test Velopack release scripts',
     '- name: Test Windows build workflow contract',
     '- name: Build and test through build.bat',
     '- name: Run executable self-check through run.bat',

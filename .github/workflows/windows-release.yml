@@ -1,0 +1,187 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - 'v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].[0-9][0-9]'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout source and pinned dependencies
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install pinned Velopack CLI
+        shell: pwsh
+        run: dotnet tool install --tool-path .\.tools vpk --version 1.2.0
+
+      - name: Test release scripts
+        shell: pwsh
+        run: |
+          .\scripts\tests\Test-ReleaseVersion.ps1
+          .\scripts\tests\Test-NewPortablePackage.ps1
+          .\scripts\tests\Test-NewVelopackRelease.ps1
+
+      - name: Resolve release version
+        shell: pwsh
+        run: >-
+          .\scripts\Resolve-ReleaseVersion.ps1
+          -Tag $env:GITHUB_REF_NAME -GitHubEnv $env:GITHUB_ENV
+
+      - name: Build and test release
+        shell: cmd
+        run: call build.bat --no-pause
+
+      - name: Run release executable self-check
+        shell: cmd
+        run: call run.bat --check
+
+      - name: Package tag-named portable build
+        shell: pwsh
+        run: >-
+          .\scripts\New-PortablePackage.ps1
+          -SourceDirectory .\src\3waSshDrive.App\bin\Release\net472
+          -OutputDirectory .\artifacts\release
+          -Label $env:GITHUB_REF_NAME
+
+      - name: Generate release notes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $generated = gh api --method POST `
+            "repos/$env:GITHUB_REPOSITORY/releases/generate-notes" `
+            -f "tag_name=$env:GITHUB_REF_NAME" `
+            -f "target_commitish=$env:GITHUB_SHA" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Release note generation failed.' }
+          Set-Content -LiteralPath .\artifacts\release-notes.md `
+            -Value $generated.body -Encoding utf8
+
+      - name: Package Velopack release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VELOPACK_SIGN_PARAMS: ${{ secrets.VELOPACK_SIGN_PARAMS }}
+        run: >-
+          .\scripts\New-VelopackRelease.ps1
+          -BuildDirectory .\src\3waSshDrive.App\bin\Release\net472
+          -OutputDirectory .\artifacts\release
+          -PackageVersion $env:THREEWA_PACKAGE_VERSION
+          -ReleaseNotes .\artifacts\release-notes.md
+          -RepositoryUrl "https://github.com/$env:GITHUB_REPOSITORY"
+          -GitHubToken $env:GH_TOKEN
+
+      - name: Validate local release assets
+        shell: pwsh
+        run: >-
+          .\scripts\Test-ReleaseAssets.ps1
+          -Directory .\artifacts\release
+          -Tag $env:GITHUB_REF_NAME
+
+      - name: Prepare draft release for idempotent upload
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $previousNativePreference = $PSNativeCommandUseErrorActionPreference
+          try {
+            $PSNativeCommandUseErrorActionPreference = $false
+            $existingOutput = gh release view $env:GITHUB_REF_NAME --json isDraft,assets 2>&1
+            $viewExitCode = $LASTEXITCODE
+          }
+          finally {
+            $PSNativeCommandUseErrorActionPreference = $previousNativePreference
+          }
+          if ($viewExitCode -eq 0) {
+            $existing = ($existingOutput | Out-String) | ConvertFrom-Json
+            if ($existing.isDraft -ne $true) {
+              throw "Release '$env:GITHUB_REF_NAME' is already published."
+            }
+
+            foreach ($asset in @($existing.assets)) {
+              gh release delete-asset $env:GITHUB_REF_NAME $asset.name --yes
+              if ($LASTEXITCODE -ne 0) {
+                throw "Unable to replace draft asset '$($asset.name)'."
+              }
+            }
+          }
+          elseif (($existingOutput | Out-String) -notmatch 'release not found') {
+            throw "Unable to inspect release '$env:GITHUB_REF_NAME': $existingOutput"
+          }
+
+      - name: Upload Velopack draft assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          .\.tools\vpk.exe upload github
+          --outputDir .\artifacts\release
+          --repoUrl "https://github.com/$env:GITHUB_REPOSITORY"
+          --token $env:GH_TOKEN
+          --tag $env:GITHUB_REF_NAME
+          --releaseName $env:GITHUB_REF_NAME
+          --merge
+
+      - name: Upload supplemental draft assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload $env:GITHUB_REF_NAME `
+            ".\artifacts\release\3waSshDrive-win-x64-$env:GITHUB_REF_NAME.zip" `
+            .\artifacts\release\assets.win.json `
+            .\artifacts\release\releases.win.json `
+            .\artifacts\release\SHA256SUMS.txt `
+            --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Supplemental asset upload failed.' }
+          gh release edit $env:GITHUB_REF_NAME `
+            --notes-file .\artifacts\release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release note update failed.' }
+
+      - name: Validate remote draft assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          .\scripts\Test-ReleaseAssets.ps1
+          -Directory .\artifacts\release
+          -Tag $env:GITHUB_REF_NAME
+          -Remote
+
+      - name: Smoke test installed release
+        shell: pwsh
+        run: >-
+          .\scripts\Test-InstalledRelease.ps1
+          -SetupPath .\artifacts\release\3waSshDrive-Setup.exe
+          -ExpectedDisplayVersion $env:THREEWA_DISPLAY_VERSION
+          -ExpectedPackageVersion $env:THREEWA_PACKAGE_VERSION
+
+      - name: Publish verified release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit $env:GITHUB_REF_NAME --draft=false --latest
+
+      - name: Upload release diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3waSshDrive-release-${{ github.ref_name }}
+          path: artifacts/release/*
+          if-no-files-found: warn
+          retention-days: 14

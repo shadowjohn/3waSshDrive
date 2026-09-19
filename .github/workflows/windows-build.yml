@@ -30,6 +30,10 @@ jobs:
         shell: pwsh
         run: .\scripts\tests\Test-NewPortablePackage.ps1
 
+      - name: Test Velopack release scripts
+        shell: pwsh
+        run: .\scripts\tests\Test-NewVelopackRelease.ps1
+
       - name: Test Windows build workflow contract
         shell: pwsh
         run: .\scripts\tests\Test-WindowsBuildWorkflow.ps1

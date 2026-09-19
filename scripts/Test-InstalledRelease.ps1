@@ -1,0 +1,89 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)][string]$SetupPath,
+    [Parameter(Mandatory = $true)][string]$ExpectedDisplayVersion,
+    [Parameter(Mandatory = $true)][string]$ExpectedPackageVersion
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$resolvedSetupPath = (Resolve-Path -LiteralPath $SetupPath).Path
+if (-not (Test-Path -LiteralPath $resolvedSetupPath -PathType Leaf)) {
+    throw "Setup executable does not exist: $SetupPath"
+}
+
+$resolver = Join-Path $PSScriptRoot 'Resolve-ReleaseVersion.ps1'
+$expectedVersion = (& $resolver -Tag $ExpectedDisplayVersion | ConvertFrom-Json)
+if ($expectedVersion.PackageVersion -ne $ExpectedPackageVersion) {
+    throw (
+        "Expected package version '$ExpectedPackageVersion' does not match " +
+        "display version '$ExpectedDisplayVersion' ($($expectedVersion.PackageVersion)).")
+}
+
+$root = Join-Path $env:LOCALAPPDATA '3waSshDrive'
+if (Test-Path -LiteralPath $root) {
+    throw "Install root already exists: $root"
+}
+
+try {
+    $setup = Start-Process `
+        -FilePath $resolvedSetupPath `
+        -ArgumentList '--silent' `
+        -Wait `
+        -PassThru
+    if ($setup.ExitCode -ne 0) {
+        throw "Setup failed: $($setup.ExitCode)"
+    }
+
+    $exe = Join-Path $root '3waSshDrive.exe'
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+        throw "Installed executable missing: $exe"
+    }
+
+    $check = Start-Process `
+        -FilePath $exe `
+        -ArgumentList '--self-check' `
+        -Wait `
+        -PassThru
+    if ($check.ExitCode -ne 0) {
+        throw "Installed self-check failed: $($check.ExitCode)"
+    }
+
+    $versionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
+    if ($versionInfo.ProductVersion -ne $ExpectedDisplayVersion) {
+        throw (
+            "Installed ProductVersion mismatch. Expected " +
+            "'$ExpectedDisplayVersion', got '$($versionInfo.ProductVersion)'.")
+    }
+    if ($versionInfo.FileVersion -ne $expectedVersion.AssemblyVersion) {
+        throw (
+            "Installed FileVersion mismatch. Expected " +
+            "'$($expectedVersion.AssemblyVersion)', got '$($versionInfo.FileVersion)'.")
+    }
+
+    Write-Host (
+        "Installed release validated: " +
+        "$ExpectedDisplayVersion ($ExpectedPackageVersion)")
+}
+finally {
+    $updateExe = Join-Path $root 'Update.exe'
+    if (Test-Path -LiteralPath $updateExe -PathType Leaf) {
+        $uninstall = Start-Process `
+            -FilePath $updateExe `
+            -ArgumentList '--silent uninstall' `
+            -Wait `
+            -PassThru
+        if ($uninstall.ExitCode -ne 0) {
+            throw "Uninstall failed: $($uninstall.ExitCode)"
+        }
+    }
+
+    $deadline = [datetime]::UtcNow.AddSeconds(30)
+    while ((Test-Path -LiteralPath $root) -and [datetime]::UtcNow -lt $deadline) {
+        Start-Sleep -Milliseconds 250
+    }
+    if (Test-Path -LiteralPath $root) {
+        throw "Uninstall left install root: $root"
+    }
+}
