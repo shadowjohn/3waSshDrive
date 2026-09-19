@@ -180,6 +180,11 @@ try {
         '[System.IO.FileShare]::None'
         'Self-check was blocked by live lock handle.'
         '$handle.Dispose()'
+        'function Test-NormalLaunchLock'
+        'Normal launch did not acquire the instance lock.'
+        'Stop-Process -Id $process.Id -Force'
+        '-RedirectStandardOutput'
+        'UpdateMode=Installed'
     )
     foreach ($fragment in $requiredRestartFragments) {
         if (-not $updateRestartSource.Contains($fragment)) {
