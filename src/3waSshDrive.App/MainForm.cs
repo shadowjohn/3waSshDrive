@@ -37,6 +37,8 @@ namespace ThreeWa.SshDrive.App
         private readonly ComboBox _authenticationMode = new ComboBox();
         private readonly TextBox _privateKeyPath = new TextBox();
         private readonly TextBox _password = new TextBox();
+        private readonly Label _authCredIconLabel = new Label();
+        private readonly Label _authCredTextLabel = new Label();
         private readonly TextBox _hostFingerprint = new TextBox();
         private readonly CheckBox _readOnly = new CheckBox();
         private readonly Label _status = new Label();
@@ -110,6 +112,7 @@ namespace ThreeWa.SshDrive.App
             Size = new Size(1100, 760);
             BackColor = Color.FromArgb(240, 246, 254);
             Font = new Font("Segoe UI", 9.2F, FontStyle.Regular, GraphicsUnit.Point);
+            AutoScaleMode = AutoScaleMode.Dpi;
 
             DoubleBuffered = true;
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
@@ -141,7 +144,7 @@ namespace ThreeWa.SshDrive.App
             typeof(TableLayoutPanel)
                 .GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                 ?.SetValue(page, true, null);
-            page.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+            page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             page.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
 
@@ -155,7 +158,7 @@ namespace ThreeWa.SshDrive.App
                 Margin = new Padding(0, 0, 0, 8)
             };
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
-            header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
             var logoBox = new PictureBox
@@ -170,7 +173,7 @@ namespace ThreeWa.SshDrive.App
 
             var titlePanel = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill,
+                AutoSize = true,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 BackColor = Color.Transparent,
@@ -240,42 +243,8 @@ namespace ThreeWa.SshDrive.App
             _checkUpdatesButton.Margin = new Padding(8, 6, 0, 0);
             ApplyRoundedRegion(_checkUpdatesButton, 6);
 
-            var sloganPanel = new TableLayoutPanel
-            {
-                AutoSize = true,
-                ColumnCount = 1,
-                RowCount = 2,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 4, 0, 0)
-            };
-            sloganPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            sloganPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            sloganPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-
-            var slogan1 = new Label
-            {
-                AutoSize = true,
-                Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
-                ForeColor = Color.FromArgb(100, 116, 139),
-                BackColor = Color.Transparent,
-                Text = "Linux 的工作空間",
-                Anchor = AnchorStyles.Right
-            };
-            var slogan2 = new Label
-            {
-                AutoSize = true,
-                Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
-                ForeColor = Color.FromArgb(100, 116, 139),
-                BackColor = Color.Transparent,
-                Text = "就在 Windows 觸手可及",
-                Anchor = AnchorStyles.Right
-            };
-            sloganPanel.Controls.Add(slogan1, 0, 0);
-            sloganPanel.Controls.Add(slogan2, 0, 1);
-
             rightHeader.Controls.Add(aboutButton);
             rightHeader.Controls.Add(_checkUpdatesButton);
-            rightHeader.Controls.Add(sloganPanel);
             header.Controls.Add(rightHeader, 2, 0);
 
             page.Controls.Add(header, 0, 0);
@@ -310,7 +279,7 @@ namespace ThreeWa.SshDrive.App
             };
             leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             // Section Header
             var sectionHeader = new FlowLayoutPanel
@@ -354,16 +323,16 @@ namespace ThreeWa.SshDrive.App
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 4,
-                RowCount = 11,
+                RowCount = 10,
                 Margin = new Padding(0, 2, 0, 2)
             };
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 26));
-            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            for (var r = 0; r < 11; r++)
+            for (var r = 0; r < 10; r++)
             {
-                fields.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / 11f));
+                fields.RowStyles.Add(new RowStyle(SizeType.Percent, 10f));
             }
 
             ConfigureComboBox(_profiles);
@@ -442,27 +411,27 @@ namespace ThreeWa.SshDrive.App
             AddRow(fields, 5, "📁", "Remote root", _remoteRoot, null);
             AddRow(fields, 6, "💽", "Drive letter", _driveLetter, null);
             AddRow(fields, 7, "🛡", "Authentication", _authenticationMode, null);
-            AddRow(fields, 8, "🔑", "Private key", _privateKeyPath, _browseButton);
-            AddRow(fields, 9, "🔒", "Password", _password, null);
-            AddRow(fields, 10, "⚙", "Options", _readOnly, null);
+            AddCredentialRow(fields, 8);
+            AddRow(fields, 9, "⚙", "Options", _readOnly, null);
             leftLayout.Controls.Add(fields, 0, 1);
 
             // Action Buttons Bar
             var actions = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 5,
-                RowCount = 1,
+                ColumnCount = 4,
+                RowCount = 2,
                 Margin = new Padding(0, 4, 0, 0)
             };
-            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28)); // Test & Mount
-            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24)); // Mount
-            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24)); // Unmount
-            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24)); // Open Explorer
-            actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // Driver install (if needed)
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 31)); // Test & Mount
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23)); // Mount
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23)); // Unmount
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23)); // Open Explorer
+            actions.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            actions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             // 1. Test & Mount (Primary highlighted blue card)
-            _testAndMountButton.Text = "▶  Test & Mount\n    測試連線並掛載";
+            _testAndMountButton.Text = "▶  Test & Mount\n    測試並掛載";
             _testAndMountButton.Dock = DockStyle.Fill;
             _testAndMountButton.FlatStyle = FlatStyle.Flat;
             _testAndMountButton.FlatAppearance.BorderSize = 0;
@@ -513,8 +482,8 @@ namespace ThreeWa.SshDrive.App
             _explorerButton.Margin = new Padding(0);
             ApplyRoundedRegion(_explorerButton, 8);
 
-            // 5. Install Driver Button (hidden when driver is present)
-            _installDriverButton.Text = "⚙ 安裝 WinFsp 驅動";
+            // 5. Install Driver Button (spans row 1 when driver is missing)
+            _installDriverButton.Text = "⚙  安裝 WinFsp 驅動程式 (點此安裝)";
             _installDriverButton.FlatStyle = FlatStyle.Flat;
             _installDriverButton.FlatAppearance.BorderColor = Color.FromArgb(252, 211, 77);
             _installDriverButton.BackColor = Color.FromArgb(254, 243, 199);
@@ -522,15 +491,17 @@ namespace ThreeWa.SshDrive.App
             _installDriverButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             _installDriverButton.Cursor = Cursors.Hand;
             _installDriverButton.Visible = false;
-            _installDriverButton.Height = 44;
-            _installDriverButton.Margin = new Padding(8, 0, 0, 0);
+            _installDriverButton.Height = 36;
+            _installDriverButton.Dock = DockStyle.Fill;
+            _installDriverButton.Margin = new Padding(0, 6, 0, 0);
             ApplyRoundedRegion(_installDriverButton, 8);
 
             actions.Controls.Add(_testAndMountButton, 0, 0);
             actions.Controls.Add(_mountButton, 1, 0);
             actions.Controls.Add(_unmountButton, 2, 0);
             actions.Controls.Add(_explorerButton, 3, 0);
-            actions.Controls.Add(_installDriverButton, 4, 0);
+            actions.Controls.Add(_installDriverButton, 0, 1);
+            actions.SetColumnSpan(_installDriverButton, 4);
             leftLayout.Controls.Add(actions, 0, 2);
 
             leftCard.Controls.Add(leftLayout);
@@ -612,45 +583,32 @@ namespace ThreeWa.SshDrive.App
                     };
                     _mascotMedia.MouseLeftButtonUp += (s, e) => CycleMascotQuote();
 
-                    // ponytail: Wrap in ClipToBounds Grid with VerticalAlignment.Center so the character stays centered when height is lower.
+                    // ponytail: Wrap in hardware-accelerated WPF Border with CornerRadius to eliminate GDI Region clipping lag.
                     var mascotGrid = new System.Windows.Controls.Grid
                     {
                         ClipToBounds = true
                     };
                     _mascotMedia.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
                     _mascotMedia.VerticalAlignment = System.Windows.VerticalAlignment.Center;
+                    _mascotMedia.ScrubbingEnabled = false;
                     mascotGrid.Children.Add(_mascotMedia);
                     mascotGrid.MouseLeftButtonUp += (s, e) => CycleMascotQuote();
 
-                    void UpdateMascotLayout()
+                    var mascotBorder = new System.Windows.Controls.Border
                     {
-                        var w = mascotGrid.ActualWidth;
-                        var h = mascotGrid.ActualHeight;
-                        if (w <= 0 || h <= 0) return;
-                        const double videoAspect = 1280.0 / 720.0;
-                        var containerAspect = h / w;
-                        if (containerAspect < videoAspect)
-                        {
-                            _mascotMedia.Width = w;
-                            _mascotMedia.Height = w * videoAspect;
-                        }
-                        else
-                        {
-                            _mascotMedia.Height = h;
-                            _mascotMedia.Width = h / videoAspect;
-                        }
-                    }
-
-                    mascotGrid.SizeChanged += (s, e) => UpdateMascotLayout();
-                    _mascotMedia.MediaOpened += (s, e) => UpdateMascotLayout();
+                        CornerRadius = new System.Windows.CornerRadius(12),
+                        ClipToBounds = true,
+                        BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(226, 232, 240)),
+                        BorderThickness = new System.Windows.Thickness(1),
+                        Child = mascotGrid
+                    };
 
                     var host = new System.Windows.Forms.Integration.ElementHost
                     {
                         Dock = DockStyle.Fill,
-                        Child = mascotGrid,
+                        Child = mascotBorder,
                         BackColor = Color.FromArgb(240, 246, 254)
                     };
-                    ApplyRoundedRegion(host, 12, Color.FromArgb(226, 232, 240));
                     _mascotMedia.Play();
                     mascotDisplay = host;
                 }
@@ -719,7 +677,18 @@ namespace ThreeWa.SshDrive.App
         {
             _profiles.SelectedIndexChanged += (sender, args) => LoadSelectedProfile();
             _authenticationMode.SelectedIndexChanged += (sender, args) =>
+            {
                 UpdateAuthenticationControls();
+                RefreshActionState();
+            };
+            _name.TextChanged += (sender, args) => RefreshActionState();
+            _host.TextChanged += (sender, args) => RefreshActionState();
+            _username.TextChanged += (sender, args) => RefreshActionState();
+            _remoteRoot.TextChanged += (sender, args) => RefreshActionState();
+            _privateKeyPath.TextChanged += (sender, args) => RefreshActionState();
+            _password.TextChanged += (sender, args) => RefreshActionState();
+            _driveLetter.SelectedIndexChanged += (sender, args) => RefreshActionState();
+            _port.ValueChanged += (sender, args) => RefreshActionState();
             _newButton.Click += (sender, args) => NewProfile();
             _saveButton.Click += (sender, args) => ExecuteUi(SaveCurrentProfile);
             _deleteButton.Click += (sender, args) => ExecuteUi(DeleteCurrentProfile);
@@ -1147,16 +1116,46 @@ namespace ThreeWa.SshDrive.App
             RefreshActionState();
         }
 
+        private bool IsFormReadyForMount()
+        {
+            if (string.IsNullOrWhiteSpace(_host.Text)) return false;
+            if (string.IsNullOrWhiteSpace(_username.Text)) return false;
+            if (string.IsNullOrWhiteSpace(_remoteRoot.Text) || !_remoteRoot.Text.Trim().StartsWith("/")) return false;
+            if (string.IsNullOrWhiteSpace(SelectedDriveLetter())) return false;
+            if (_port.Value < 1 || _port.Value > 65535) return false;
+
+            var auth = SelectedAuthenticationMode();
+            if (auth == AuthenticationMode.PrivateKey)
+            {
+                if (string.IsNullOrWhiteSpace(_privateKeyPath.Text)) return false;
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(_password.Text)) return false;
+            }
+
+            return true;
+        }
+
+        private bool IsFormReadyForSave()
+        {
+            if (string.IsNullOrWhiteSpace(_name.Text)) return false;
+            if (string.IsNullOrWhiteSpace(_host.Text)) return false;
+            if (string.IsNullOrWhiteSpace(_username.Text)) return false;
+            if (string.IsNullOrWhiteSpace(SelectedDriveLetter())) return false;
+            return true;
+        }
+
         private void RefreshActionState()
         {
             var actionsDisabled = _busy || _isApplyingUpdate;
             UseWaitCursor = actionsDisabled;
             _profiles.Enabled = !actionsDisabled;
             _newButton.Enabled = !actionsDisabled;
-            _testButton.Enabled = !actionsDisabled;
-            _unmountButton.Enabled = !actionsDisabled;
-            _saveButton.Enabled = !actionsDisabled;
-            _deleteButton.Enabled = !actionsDisabled;
+            _testButton.Enabled = !actionsDisabled && IsFormReadyForMount();
+            _unmountButton.Enabled = !actionsDisabled && _mountedDrives.Count > 0;
+            _saveButton.Enabled = !actionsDisabled && IsFormReadyForSave();
+            _deleteButton.Enabled = !actionsDisabled && _profiles.SelectedIndex >= 0 && _profileItems.Count > 0;
             _explorerButton.Enabled = !actionsDisabled;
             _authenticationMode.Enabled = !actionsDisabled;
             _installDriverButton.Enabled = !actionsDisabled;
@@ -1165,8 +1164,9 @@ namespace ThreeWa.SshDrive.App
             _readOnly.Enabled = !actionsDisabled;
 
             var runtime = WinFspRuntimePreflight.CheckX64();
-            _testAndMountButton.Enabled = !actionsDisabled && runtime.IsValid;
-            _mountButton.Enabled = !actionsDisabled && runtime.IsValid;
+            var canMount = !actionsDisabled && runtime.IsValid && IsFormReadyForMount();
+            _testAndMountButton.Enabled = canMount;
+            _mountButton.Enabled = canMount;
             _installDriverButton.Visible = !runtime.IsValid;
 
             UpdateAuthenticationControls();
@@ -1290,9 +1290,26 @@ namespace ThreeWa.SshDrive.App
             var usingPrivateKey =
                 SelectedAuthenticationMode() == AuthenticationMode.PrivateKey;
             var actionsEnabled = !_busy && !_isApplyingUpdate;
-            _privateKeyPath.Enabled = usingPrivateKey && actionsEnabled;
-            _browseButton.Enabled = usingPrivateKey && actionsEnabled;
-            _password.Enabled = !usingPrivateKey && actionsEnabled;
+
+            if (usingPrivateKey)
+            {
+                _authCredIconLabel.Text = "🔑";
+                _authCredTextLabel.Text = "Private key";
+                _privateKeyPath.Visible = true;
+                _privateKeyPath.Enabled = actionsEnabled;
+                _browseButton.Visible = true;
+                _browseButton.Enabled = actionsEnabled;
+                _password.Visible = false;
+            }
+            else
+            {
+                _authCredIconLabel.Text = "🔒";
+                _authCredTextLabel.Text = "Password";
+                _privateKeyPath.Visible = false;
+                _browseButton.Visible = false;
+                _password.Visible = true;
+                _password.Enabled = actionsEnabled;
+            }
         }
 
         private bool IsMounted(string driveLetter)
@@ -1430,6 +1447,39 @@ namespace ThreeWa.SshDrive.App
                 action.Margin = new Padding(0, 1, 0, 1);
                 table.Controls.Add(action, 3, row);
             }
+        }
+
+        private void AddCredentialRow(TableLayoutPanel table, int row)
+        {
+            _authCredIconLabel.AutoSize = true;
+            _authCredIconLabel.Text = "🔑";
+            _authCredIconLabel.ForeColor = Color.FromArgb(59, 130, 246);
+            _authCredIconLabel.Font = new Font("Segoe UI", 10F, FontStyle.Regular);
+            _authCredIconLabel.Anchor = AnchorStyles.Right;
+            _authCredIconLabel.Margin = new Padding(0, 4, 4, 4);
+
+            _authCredTextLabel.AutoSize = true;
+            _authCredTextLabel.Text = "Private key";
+            _authCredTextLabel.ForeColor = Color.FromArgb(30, 41, 59);
+            _authCredTextLabel.Font = new Font("Segoe UI", 9.2F, FontStyle.Regular);
+            _authCredTextLabel.Anchor = AnchorStyles.Left;
+            _authCredTextLabel.Margin = new Padding(0, 4, 8, 4);
+
+            _privateKeyPath.Dock = DockStyle.Fill;
+            _privateKeyPath.Margin = new Padding(0, 2, 8, 2);
+
+            _password.Dock = DockStyle.Fill;
+            _password.Margin = new Padding(0, 2, 8, 2);
+            _password.Visible = false;
+
+            _browseButton.AutoSize = true;
+            _browseButton.Margin = new Padding(0, 1, 0, 1);
+
+            table.Controls.Add(_authCredIconLabel, 0, row);
+            table.Controls.Add(_authCredTextLabel, 1, row);
+            table.Controls.Add(_privateKeyPath, 2, row);
+            table.Controls.Add(_password, 2, row);
+            table.Controls.Add(_browseButton, 3, row);
         }
 
         private void SetMascotSpeech(string text)
