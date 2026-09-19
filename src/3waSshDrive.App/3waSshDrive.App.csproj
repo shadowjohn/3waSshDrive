@@ -42,8 +42,6 @@
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\app.ico"
           CopyToOutputDirectory="PreserveNewest" />
-    <None Include="Assets\avatar_prompt.txt"
-          CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\header_logo.png"
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\mascot_card.png"

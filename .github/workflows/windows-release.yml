@@ -34,6 +34,7 @@ jobs:
         shell: pwsh
         run: |
           .\scripts\tests\Test-ReleaseVersion.ps1
+          .\scripts\tests\Test-NewReleaseStaging.ps1
           .\scripts\tests\Test-NewPortablePackage.ps1
           .\scripts\tests\Test-NewVelopackRelease.ps1
 
@@ -51,11 +52,18 @@ jobs:
         shell: cmd
         run: call run.bat --check
 
+      - name: Stage runtime release files
+        shell: pwsh
+        run: >-
+          .\scripts\New-ReleaseStaging.ps1
+          -SourceDirectory .\src\3waSshDrive.App\bin\Release\net472
+          -OutputDirectory .\artifacts\release-stage
+
       - name: Package tag-named portable build
         shell: pwsh
         run: >-
           .\scripts\New-PortablePackage.ps1
-          -SourceDirectory .\src\3waSshDrive.App\bin\Release\net472
+          -SourceDirectory .\artifacts\release-stage
           -OutputDirectory .\artifacts\release
           -Label $env:GITHUB_REF_NAME
 
@@ -79,7 +87,7 @@ jobs:
           VELOPACK_SIGN_PARAMS: ${{ secrets.VELOPACK_SIGN_PARAMS }}
         run: >-
           .\scripts\New-VelopackRelease.ps1
-          -BuildDirectory .\src\3waSshDrive.App\bin\Release\net472
+          -BuildDirectory .\artifacts\release-stage
           -OutputDirectory .\artifacts\release
           -PackageVersion $env:THREEWA_PACKAGE_VERSION
           -ReleaseNotes .\artifacts\release-notes.md
