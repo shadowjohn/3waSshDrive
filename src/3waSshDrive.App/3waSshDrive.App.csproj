@@ -10,7 +10,7 @@
     <Version>2026091901</Version>
     <AssemblyVersion>2026.09.19.01</AssemblyVersion>
     <FileVersion>2026.09.19.01</FileVersion>
-    <Authors>羽山 (秋人)</Authors>
+    <Authors>羽山秋人</Authors>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\3waSshDrive.Core\3waSshDrive.Core.csproj" />
@@ -33,11 +33,17 @@
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\mascot_card.png"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\background.jpg"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\background.png"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Assets\mascot.jpg" />
     <EmbeddedResource Include="Assets\app.ico" />
     <EmbeddedResource Include="Assets\header_logo.png" />
     <EmbeddedResource Include="Assets\mascot_card.png" />
+    <EmbeddedResource Include="Assets\background.jpg" />
+    <EmbeddedResource Include="Assets\background.png" />
   </ItemGroup>
 </Project>
