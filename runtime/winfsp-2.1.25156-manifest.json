@@ -1,0 +1,22 @@
+{
+  "component": "WinFsp Core runtime",
+  "release": "2.1.25156",
+  "commit": "ddca7bd5481857a65ba552f643b8776fd070836f",
+  "installer": {
+    "fileName": "winfsp-2.1.25156.msi",
+    "sha256": "073A70E00F77423E34BED98B86E600DEF93393BA5822204FAC57A29324DB9F7A",
+    "source": "https://github.com/winfsp/winfsp/releases/tag/v2.1"
+  },
+  "x64": {
+    "fileVersion": "2.1.25156.ddca7bd",
+    "nativeDll": {
+      "fileName": "winfsp-x64.dll",
+      "sha256": "08D7389B8D030770A4DE108A60A86047D5CDD00B9ECAFC6DD66E957BC51C2437"
+    },
+    "driver": {
+      "fileName": "winfsp-x64.sys",
+      "sha256": "03553FFFACD362F4A9A08C00B4F236A82354A183BC6028494FB32055386E13C9"
+    }
+  },
+  "launcherRequiredForDirectDriveMount": false
+}

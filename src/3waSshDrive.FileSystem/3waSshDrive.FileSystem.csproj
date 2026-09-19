@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <RootNamespace>ThreeWa.SshDrive.FileSystem</RootNamespace>
+    <AssemblyName>3waSshDrive.FileSystem</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\3waSshDrive.Core\3waSshDrive.Core.csproj" />
+    <ProjectReference Include="..\3waSshDrive.Sftp\3waSshDrive.Sftp.csproj" />
+    <ProjectReference Include="..\3waSshDrive.WinFsp\3waSshDrive.WinFsp.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.Runtime.Serialization" />
+    <EmbeddedResource Include="..\..\runtime\winfsp-2.1.25156-manifest.json"
+                      Link="runtime\winfsp-2.1.25156-manifest.json" />
+  </ItemGroup>
+</Project>

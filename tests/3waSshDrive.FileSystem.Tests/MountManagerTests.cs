@@ -1,0 +1,247 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using ThreeWa.SshDrive.Core.Models;
+using ThreeWa.SshDrive.Core.Remote;
+using ThreeWa.SshDrive.FileSystem.Mounting;
+
+namespace ThreeWa.SshDrive.FileSystem.Tests
+{
+    [TestClass]
+    public sealed class MountManagerTests
+    {
+        [TestMethod]
+        public void Mount_InvalidProfileDoesNotCreateRemoteConnection()
+        {
+            var factoryCalls = 0;
+            var manager = new MountManager(
+                profile =>
+                {
+                    factoryCalls++;
+                    return new TrackingRemoteFileSystem(new List<string>());
+                },
+                fileSystem => new TrackingFileSystemHost(new List<string>(), 0));
+            var profile = ValidProfile();
+            profile.HostKeyFingerprintSha256 = "";
+
+            Assert.ThrowsException<InvalidOperationException>(
+                () => manager.Mount(profile));
+            Assert.AreEqual(0, factoryCalls);
+        }
+
+        [TestMethod]
+        public void Mount_FailedWinFspMountDisposesBothOwnedResources()
+        {
+            var events = new List<string>();
+            var remote = new TrackingRemoteFileSystem(events);
+            var host = new TrackingFileSystemHost(
+                events,
+                unchecked((int)0xc0000001));
+            var manager = new MountManager(
+                profile => remote,
+                fileSystem => host);
+
+            var exception = Assert.ThrowsException<MountException>(
+                () => manager.Mount(ValidProfile()));
+
+            Assert.AreEqual(unchecked((int)0xc0000001), exception.Status);
+            CollectionAssert.Contains(events, "host.dispose");
+            CollectionAssert.Contains(events, "remote.dispose");
+        }
+
+        [TestMethod]
+        public void Mount_FailedWinFspMountPreservesFailureAndDisposesRemoteWhenHostCleanupThrows()
+        {
+            var events = new List<string>();
+            var remote = new TrackingRemoteFileSystem(events);
+            var host = new TrackingFileSystemHost(
+                events,
+                unchecked((int)0xc0000001),
+                throwOnDispose: true);
+            var manager = new MountManager(
+                profile => remote,
+                fileSystem => host);
+
+            var exception = Assert.ThrowsException<MountException>(
+                () => manager.Mount(ValidProfile()));
+
+            Assert.AreEqual(unchecked((int)0xc0000001), exception.Status);
+            CollectionAssert.Contains(events, "host.dispose");
+            CollectionAssert.Contains(events, "remote.dispose");
+        }
+
+        [TestMethod]
+        public void Dispose_UnmountsHostBeforeClosingRemoteConnection()
+        {
+            var events = new List<string>();
+            var remote = new TrackingRemoteFileSystem(events);
+            var host = new TrackingFileSystemHost(events, 0);
+            var manager = new MountManager(
+                profile => remote,
+                fileSystem => host);
+
+            var mounted = manager.Mount(ValidProfile());
+            mounted.Dispose();
+            mounted.Dispose();
+
+            CollectionAssert.AreEqual(new[]
+            {
+                "remote.connect",
+                "host.mount:Z:",
+                "host.unmount",
+                "host.dispose",
+                "remote.dispose"
+            }, events);
+        }
+
+        [TestMethod]
+        public void MountedDrive_EnsureConnected_ReconnectsWhenDisconnected()
+        {
+            var events = new List<string>();
+            var remote = new TrackingRemoteFileSystem(events);
+            var host = new TrackingFileSystemHost(events, 0);
+            var manager = new MountManager(
+                profile => remote,
+                fileSystem => host);
+
+            var mounted = manager.Mount(ValidProfile());
+            Assert.IsTrue(mounted.IsConnected);
+
+            // Simulate network disconnect
+            remote.IsConnected = false;
+            Assert.IsFalse(mounted.IsConnected);
+
+            // Trigger automatic reconnection
+            mounted.EnsureConnected();
+            Assert.IsTrue(mounted.IsConnected);
+            CollectionAssert.Contains(events, "remote.connect");
+        }
+
+        private static DriveProfile ValidProfile()
+        {
+            return new DriveProfile
+            {
+                Name = "DevServer",
+                Host = "203.0.113.10",
+                Port = 22,
+                Username = "dev",
+                RemoteRoot = "/home/dev",
+                DriveLetter = "Z:",
+                PrivateKeyPath = @"C:\keys\id_ed25519",
+                HostKeyFingerprintSha256 = "SHA256:abc123"
+            };
+        }
+
+        private sealed class TrackingRemoteFileSystem : IRemoteFileSystem
+        {
+            private readonly IList<string> _events;
+
+            public TrackingRemoteFileSystem(IList<string> events)
+            {
+                _events = events;
+            }
+
+            public bool IsConnected { get; set; }
+            public object SyncRoot { get; } = new object();
+
+            public void Connect()
+            {
+                IsConnected = true;
+                _events.Add("remote.connect");
+            }
+
+            public RemoteEntry GetEntry(string path)
+            {
+                throw new NotSupportedException();
+            }
+
+            public IReadOnlyList<RemoteEntry> ListDirectory(string path)
+            {
+                throw new NotSupportedException();
+            }
+
+            public Stream OpenRead(string path)
+            {
+                throw new NotSupportedException();
+            }
+
+            public Stream OpenFile(string path, FileMode mode, FileAccess access)
+            {
+                throw new NotSupportedException();
+            }
+
+            public void CreateDirectory(string path)
+            {
+                throw new NotSupportedException();
+            }
+
+            public void DeleteFile(string path)
+            {
+                throw new NotSupportedException();
+            }
+
+            public void DeleteDirectory(string path)
+            {
+                throw new NotSupportedException();
+            }
+
+            public void Rename(string oldPath, string newPath, bool replaceIfExists)
+            {
+                throw new NotSupportedException();
+            }
+
+            public RemoteVolumeInfo GetVolumeInfo(string path = null)
+            {
+                return new RemoteVolumeInfo(100UL * 1024 * 1024 * 1024, 50UL * 1024 * 1024 * 1024);
+            }
+
+            public void Dispose()
+            {
+                if (!IsConnected)
+                    return;
+                IsConnected = false;
+                _events.Add("remote.dispose");
+            }
+        }
+
+        private sealed class TrackingFileSystemHost : IFileSystemHost
+        {
+            private readonly IList<string> _events;
+            private readonly int _mountStatus;
+            private readonly bool _throwOnDispose;
+            private bool _disposed;
+
+            public TrackingFileSystemHost(
+                IList<string> events,
+                int mountStatus,
+                bool throwOnDispose = false)
+            {
+                _events = events;
+                _mountStatus = mountStatus;
+                _throwOnDispose = throwOnDispose;
+            }
+
+            public int Mount(string mountPoint)
+            {
+                _events.Add("host.mount:" + mountPoint);
+                return _mountStatus;
+            }
+
+            public void Unmount()
+            {
+                _events.Add("host.unmount");
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                    return;
+                _disposed = true;
+                _events.Add("host.dispose");
+                if (_throwOnDispose)
+                    throw new IOException("Simulated host cleanup failure.");
+            }
+        }
+    }
+}

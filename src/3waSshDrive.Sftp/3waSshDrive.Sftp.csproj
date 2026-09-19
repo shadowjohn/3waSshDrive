@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <RootNamespace>ThreeWa.SshDrive.Sftp</RootNamespace>
+    <AssemblyName>3waSshDrive.Sftp</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\3waSshDrive.Core\3waSshDrive.Core.csproj" />
+    <ProjectReference Include="..\..\third_party\sshnet\src\Renci.SshNet\Renci.SshNet.csproj" />
+  </ItemGroup>
+</Project>

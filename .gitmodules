@@ -1,0 +1,7 @@
+[submodule "third_party/winfsp"]
+	path = third_party/winfsp
+	url = https://github.com/winfsp/winfsp.git
+[submodule "third_party/sshnet"]
+	path = third_party/sshnet
+	url = https://github.com/sshnet/SSH.NET.git
+

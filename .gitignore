@@ -1,0 +1,11 @@
+[Bb]in/
+[Oo]bj/
+.vs/
+TestResults/
+*.user
+*.suo
+*.nupkg
+artifacts/
+log/
+lock.pid
+*.pid
