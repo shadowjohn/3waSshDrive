@@ -243,7 +243,22 @@ namespace ThreeWa.SshDrive.App
             _checkUpdatesButton.Margin = new Padding(8, 6, 0, 0);
             ApplyRoundedRegion(_checkUpdatesButton, 6);
 
+            _installDriverButton.Text = "⚙ 安裝驅動";
+            _installDriverButton.AutoSize = true;
+            _installDriverButton.FlatStyle = FlatStyle.Flat;
+            _installDriverButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+            _installDriverButton.BackColor = Color.FromArgb(241, 245, 249);
+            _installDriverButton.ForeColor = Color.FromArgb(71, 85, 105);
+            _installDriverButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _installDriverButton.Cursor = Cursors.Hand;
+            _installDriverButton.Height = 32;
+            _installDriverButton.Padding = new Padding(10, 2, 10, 2);
+            _installDriverButton.Margin = new Padding(8, 6, 0, 0);
+            _installDriverButton.Visible = false;
+            ApplyRoundedRegion(_installDriverButton, 6);
+
             rightHeader.Controls.Add(aboutButton);
+            rightHeader.Controls.Add(_installDriverButton);
             rightHeader.Controls.Add(_checkUpdatesButton);
             header.Controls.Add(rightHeader, 2, 0);
 
@@ -279,7 +294,7 @@ namespace ThreeWa.SshDrive.App
             };
             leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            leftLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
 
             // Section Header
             var sectionHeader = new FlowLayoutPanel
@@ -420,7 +435,7 @@ namespace ThreeWa.SshDrive.App
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 4,
-                RowCount = 2,
+                RowCount = 1,
                 Margin = new Padding(0, 4, 0, 0)
             };
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 31)); // Test & Mount
@@ -428,7 +443,6 @@ namespace ThreeWa.SshDrive.App
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23)); // Unmount
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23)); // Open Explorer
             actions.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            actions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             // 1. Test & Mount (Primary highlighted blue card)
             _testAndMountButton.Text = "▶  Test & Mount\n    測試並掛載";
@@ -482,26 +496,10 @@ namespace ThreeWa.SshDrive.App
             _explorerButton.Margin = new Padding(0);
             ApplyRoundedRegion(_explorerButton, 8);
 
-            // 5. Install Driver Button (spans row 1 when driver is missing)
-            _installDriverButton.Text = "⚙  安裝 WinFsp 驅動程式 (點此安裝)";
-            _installDriverButton.FlatStyle = FlatStyle.Flat;
-            _installDriverButton.FlatAppearance.BorderColor = Color.FromArgb(252, 211, 77);
-            _installDriverButton.BackColor = Color.FromArgb(254, 243, 199);
-            _installDriverButton.ForeColor = Color.FromArgb(180, 83, 9);
-            _installDriverButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            _installDriverButton.Cursor = Cursors.Hand;
-            _installDriverButton.Visible = false;
-            _installDriverButton.Height = 36;
-            _installDriverButton.Dock = DockStyle.Fill;
-            _installDriverButton.Margin = new Padding(0, 6, 0, 0);
-            ApplyRoundedRegion(_installDriverButton, 8);
-
             actions.Controls.Add(_testAndMountButton, 0, 0);
             actions.Controls.Add(_mountButton, 1, 0);
             actions.Controls.Add(_unmountButton, 2, 0);
             actions.Controls.Add(_explorerButton, 3, 0);
-            actions.Controls.Add(_installDriverButton, 0, 1);
-            actions.SetColumnSpan(_installDriverButton, 4);
             leftLayout.Controls.Add(actions, 0, 2);
 
             leftCard.Controls.Add(leftLayout);
