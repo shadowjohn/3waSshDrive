@@ -1,5 +1,14 @@
 # 3waSshDrive History
 
+## 2026-09-19 — Phase B build and release foundation
+
+- Fixed the public version contract at `vYYYY.MM.DD.RR`; for example, `v2026.09.19.01` maps to Velopack `2026.919.1` and assembly/file version `2026.9.19.1`.
+- Added an executable `--self-check` path that validates x64 and packaged metadata/files without requiring SSH, network access, or WinFsp.
+- Added a Windows x64 push/PR workflow artifact with a portable ZIP and SHA-256 checksum while retaining `build.bat` and `run.bat` as the shared entry points.
+- Added pinned Velopack 1.2.0 packaging for a per-user `3waSshDrive-Setup.exe` installed under `%LocalAppData%\3waSshDrive`; WinFsp remains a separately verified prerequisite and is not bundled.
+- Made Authenticode signing optional so an unsigned release remains valid when no certificate is configured.
+- Added a draft-before-publish gate: required assets and checksums are verified, the Setup is installed on a clean runner, the installed EXE and versions are checked, and uninstall must remove the install root before publication.
+
 ## 2026-09-18 — Project start
 
 - Project name fixed as `3waSshDrive`.

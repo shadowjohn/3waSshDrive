@@ -82,8 +82,18 @@ cd 3waSshDrive
 
 ### 2. 一鍵建置與執行 (懶人腳本)
 
-- 雙擊 **`build.bat`**：自動還原依賴、執行全套 44 項單元測試並編譯 Release 版本。
+- 雙擊 **`build.bat`**：自動還原依賴、執行全套單元測試並編譯 Release 版本。
 - 雙擊 **`run.bat`**：直接啟動應用程式。
+
+也可以在命令提示字元或 PowerShell 直接執行：
+
+```bat
+build.bat
+run.bat
+run.bat --check
+```
+
+`run.bat --check` 會啟動真正的 `3waSshDrive.exe --self-check`、等待完成並傳回相同的 exit code；檢查過程不連線 SSH，也不要求 WinFsp 已安裝。
 
 ### 3. 命令列建置 (Command Line)
 
@@ -97,6 +107,27 @@ dotnet build .\src\3waSshDrive.App\3waSshDrive.App.csproj -c Release --no-restor
 ```text
 src\3waSshDrive.App\bin\Release\net472\3waSshDrive.exe
 ```
+
+---
+
+## 📦 CI 產物與正式發行 (Artifacts & Releases)
+
+一般 push 與 pull request 通過 Windows build 後，Actions 會提供 `3waSshDrive-win-x64-<short-sha>.zip` 與對應的 `.sha256`。這份 ZIP 是免安裝的測試／驗收產物，不是正式安裝或自動更新的基礎。
+
+正式版本使用 `vYYYY.MM.DD.RR` tag；同一天的 `RR` 可由 `01` 遞增至 `99`。例如：
+
+```bat
+git tag v2026.09.19.01
+git push origin v2026.09.19.01
+```
+
+tag workflow 會建立 Velopack 1.2.0 的 x64、per-user 安裝包，先保持 GitHub Release 為 draft，完成資產檢查、乾淨安裝、EXE self-check、版本核對與解除安裝後才發布。正式下載入口是 `3waSshDrive-Setup.exe`，預設安裝位置為：
+
+```text
+%LocalAppData%\3waSshDrive
+```
+
+WinFsp 不會包進 Setup；它是另外下載並驗證的必要元件，程式內的輔助安裝會固定要求 WinFsp `2.1.25156`。若維護者沒有設定簽章憑證，產生 unsigned Release 是預期且受支援的流程。Microsoft Security Intelligence 線上送檢由維護者在下載正式產物後手動進行，不在 GitHub Actions 內，也不阻擋發版。
 
 ---
 
