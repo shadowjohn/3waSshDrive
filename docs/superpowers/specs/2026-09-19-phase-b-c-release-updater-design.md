@@ -127,9 +127,9 @@ tag vYYYY.MM.DD.RR 觸發 release job：
 
 ### 6.4 安裝範圍
 
-Setup 採 per-user 安裝，目標路徑為：
+Setup 採 Velopack 1.2.0 原生 per-user 安裝，預設目標路徑為：
 
-%LocalAppData%\Programs\3waSshDrive
+%LocalAppData%\3waSshDrive
 
 應用程式本身的安裝與更新不要求系統管理員權限。WinFsp 是獨立的系統元件，其安裝可另外觸發 UAC。
 
@@ -237,7 +237,7 @@ lock.pid 可寫入 PID 供診斷，但是否已有執行個體只以能否取得
 - tag 與三種版本資訊映射正確；
 - Velopack Setup 與 feed 資產完整；
 - 乾淨 Windows runner 可靜默 per-user 安裝；
-- 安裝路徑為 %LocalAppData%\Programs\3waSshDrive；
+- 安裝路徑為 %LocalAppData%\3waSshDrive；
 - 已安裝 EXE --self-check 回傳 0 且版本正確；
 - 靜默解除安裝成功；
 - 上述檢查完成前 Release 保持 draft。
