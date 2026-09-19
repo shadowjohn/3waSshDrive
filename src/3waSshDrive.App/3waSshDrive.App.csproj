@@ -7,11 +7,24 @@
     <RootNamespace>ThreeWa.SshDrive.App</RootNamespace>
     <AssemblyName>3waSshDrive</AssemblyName>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>2026091901</Version>
-    <AssemblyVersion>2026.09.19.01</AssemblyVersion>
-    <FileVersion>2026.09.19.01</FileVersion>
+    <ThreeWaDisplayVersion Condition="'$(ThreeWaDisplayVersion)' == ''">v2026.09.19.01</ThreeWaDisplayVersion>
+    <ThreeWaPackageVersion Condition="'$(ThreeWaPackageVersion)' == ''">2026.919.1</ThreeWaPackageVersion>
+    <ThreeWaAssemblyVersion Condition="'$(ThreeWaAssemblyVersion)' == ''">2026.9.19.1</ThreeWaAssemblyVersion>
+    <Version>$(ThreeWaPackageVersion)</Version>
+    <AssemblyVersion>$(ThreeWaAssemblyVersion)</AssemblyVersion>
+    <FileVersion>$(ThreeWaAssemblyVersion)</FileVersion>
+    <InformationalVersion>$(ThreeWaDisplayVersion)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
     <Authors>羽山秋人</Authors>
   </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="VelopackPackageVersion" Value="$(ThreeWaPackageVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.0" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\3waSshDrive.Core\3waSshDrive.Core.csproj" />
     <ProjectReference Include="..\3waSshDrive.Sftp\3waSshDrive.Sftp.csproj" />

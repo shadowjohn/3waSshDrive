@@ -6,7 +6,7 @@ using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using ThreeWa.SshDrive.Core.Logging;
+using ThreeWa.SshDrive.App.Diagnostics;
 using ThreeWa.SshDrive.Core.Models;
 using ThreeWa.SshDrive.Core.Profiles;
 using ThreeWa.SshDrive.FileSystem.Mounting;
@@ -16,8 +16,6 @@ namespace ThreeWa.SshDrive.App
 {
     internal sealed class MainForm : Form
     {
-        public const string AppVersion = "2026091901";
-
         private readonly ProfileStore _profileStore;
         private readonly SshConnectionProbe _connectionProbe;
         private readonly MountManager _mountManager;
@@ -93,7 +91,7 @@ namespace ThreeWa.SshDrive.App
             _connectionProbe = connectionProbe ?? throw new ArgumentNullException(nameof(connectionProbe));
             _mountManager = mountManager ?? throw new ArgumentNullException(nameof(mountManager));
 
-            Text = $"3waSshDrive - {AppVersion}";
+            Text = $"3waSshDrive - {Application.ProductVersion}";
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(1080, 750);
             Size = new Size(1100, 760);
@@ -1387,7 +1385,7 @@ namespace ThreeWa.SshDrive.App
             var aboutText =
                 $"3waSshDrive\n" +
                 $"──────────────────────────────\n\n" +
-                $"• 版本：{AppVersion}\n" +
+                $"• 版本：{Application.ProductVersion}\n" +
                 $"• 作者 (Author)：羽山秋人\n" +
                 $"• 團隊：3WA 問題解決專家工作室\n" +
                 $"• 信箱：linainverseshadow@gmail.com\n" +

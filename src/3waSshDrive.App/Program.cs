@@ -3,8 +3,9 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using ThreeWa.SshDrive.Core.Logging;
+using ThreeWa.SshDrive.App.Diagnostics;
 using ThreeWa.SshDrive.Core.Utils;
+using Velopack;
 
 namespace ThreeWa.SshDrive.App
 {
@@ -19,9 +20,40 @@ namespace ThreeWa.SshDrive.App
         private const int SW_RESTORE = 9;
 
         [STAThread]
-        private static void Main()
+        private static int Main(string[] args)
         {
-            // ponytail: Single-instance lock via lock.pid to prevent duplicate runs.
+            var options = StartupOptions.Parse(args);
+            if (options.SelfCheck)
+            {
+                SelfCheckConsole.AttachParent();
+            }
+
+            try
+            {
+                VelopackApp.Build()
+                    .SetAutoApplyOnStartup(false)
+                    .Run();
+            }
+            catch (Exception exception)
+            {
+                if (options.SelfCheck)
+                {
+                    Console.Error.WriteLine(
+                        "SELF-CHECK FAILED: Velopack bootstrap (" +
+                        exception.GetType().Name +
+                        ")");
+                    return 1;
+                }
+
+                CrashLogger.Log("Velopack.Bootstrap", exception);
+                return 1;
+            }
+
+            if (options.SelfCheck)
+            {
+                return SelfCheckRunner.RunCurrentProcess(true, Console.Out);
+            }
+
             if (!SingleInstanceLock.TryAcquire(out var appLock))
             {
                 TryActivateExistingWindow();
@@ -30,56 +62,53 @@ namespace ThreeWa.SshDrive.App
                     "3waSshDrive",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
-                return;
+                return 0;
             }
 
             using (appLock)
             {
-                // ponytail: Hook all unhandled exception sinks to CrashLogger for automatic crash recording.
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
 
-            // 1. UI Thread unhandled exceptions
-            Application.ThreadException += (sender, e) =>
-            {
-                CrashLogger.Log("Application.ThreadException", e.Exception);
+                Application.ThreadException += (sender, e) =>
+                {
+                    CrashLogger.Log("Application.ThreadException", e.Exception);
+                    try
+                    {
+                        MessageBox.Show(
+                            $"程式發生未預期的異常 (已記錄至 log 目錄)：\n\n{e.Exception.Message}",
+                            "3waSshDrive - 異常錯誤",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                    }
+                    catch
+                    {
+                    }
+                };
+
+                AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+                {
+                    var exception = e.ExceptionObject as Exception ?? new Exception();
+                    CrashLogger.Log("AppDomain.UnhandledException", exception);
+                };
+
+                TaskScheduler.UnobservedTaskException += (sender, e) =>
+                {
+                    CrashLogger.Log("TaskScheduler.UnobservedTaskException", e.Exception);
+                    e.SetObserved();
+                };
+
                 try
                 {
-                    MessageBox.Show(
-                        $"程式發生未預期的異常 (已記錄至 log 目錄)：\n\n{e.Exception.Message}",
-                        "3waSshDrive - 異常錯誤",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
+                    Application.EnableVisualStyles();
+                    Application.SetCompatibleTextRenderingDefault(false);
+                    Application.Run(new MainForm());
+                    return 0;
                 }
-                catch
+                catch (Exception exception)
                 {
+                    CrashLogger.Log("Program.Main", exception);
+                    throw;
                 }
-            };
-
-            // 2. Non-UI / background thread unhandled exceptions
-            AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
-            {
-                var ex = e.ExceptionObject as Exception ?? new Exception(e.ExceptionObject?.ToString());
-                CrashLogger.Log($"AppDomain.UnhandledException (IsTerminating={e.IsTerminating})", ex);
-            };
-
-            // 3. Unobserved task exceptions
-            TaskScheduler.UnobservedTaskException += (sender, e) =>
-            {
-                CrashLogger.Log("TaskScheduler.UnobservedTaskException", e.Exception);
-                e.SetObserved();
-            };
-
-            try
-            {
-                Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(false);
-                Application.Run(new MainForm());
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.Log("Program.Main", ex);
-                throw;
-            }
             }
         }
 

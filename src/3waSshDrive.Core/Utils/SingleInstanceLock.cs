@@ -21,28 +21,19 @@ namespace ThreeWa.SshDrive.Core.Utils
 
         public static string GetDefaultLockFilePath()
         {
-            try
+            var localAppData = Environment.GetFolderPath(
+                Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localAppData))
             {
-                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                var current = new DirectoryInfo(baseDir);
-                while (current != null)
-                {
-                    if (Directory.Exists(Path.Combine(current.FullName, ".git")) ||
-                        File.Exists(Path.Combine(current.FullName, "3waSshDrive.sln")))
-                    {
-                        return Path.Combine(current.FullName, "lock.pid");
-                    }
-
-                    current = current.Parent;
-                }
-
-                return Path.Combine(baseDir, "lock.pid");
+                throw new InvalidOperationException(
+                    "LocalApplicationData is unavailable.");
             }
-            catch
-            {
-                var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                return Path.Combine(appData, "3waSshDrive", "lock.pid");
-            }
+
+            return Path.Combine(
+                localAppData,
+                "3waSshDrive",
+                "state",
+                "lock.pid");
         }
 
         public static bool TryAcquire(out SingleInstanceLock instanceLock, string lockPath = null)

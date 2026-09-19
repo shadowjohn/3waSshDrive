@@ -16,7 +16,11 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             var psi = WinFspInstaller.CreateProcessStartInfo();
 
             Assert.IsFalse(string.IsNullOrWhiteSpace(psi.FileName));
-            StringAssert.Contains(psi.Arguments, "install WinFsp.WinFsp");
+            Assert.AreEqual("WinFsp.WinFsp", WinFspInstaller.PackageId);
+            StringAssert.Contains(psi.Arguments, "--id WinFsp.WinFsp");
+            StringAssert.Contains(psi.Arguments, "--version 2.1.25156");
+            StringAssert.Contains(psi.Arguments, "--exact");
+            StringAssert.Contains(psi.Arguments, "--source winget");
             StringAssert.Contains(psi.Arguments, "--accept-source-agreements");
             StringAssert.Contains(psi.Arguments, "--accept-package-agreements");
             Assert.IsFalse(psi.UseShellExecute);

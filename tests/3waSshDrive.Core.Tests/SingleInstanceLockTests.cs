@@ -53,6 +53,39 @@ namespace ThreeWa.SshDrive.Core.Tests
         }
 
         [TestMethod]
+        public void GetDefaultLockFilePath_UsesPerUserStateDirectory()
+        {
+            var path = SingleInstanceLock.GetDefaultLockFilePath();
+            var expected = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "3waSshDrive",
+                "state",
+                "lock.pid");
+
+            Assert.AreEqual(expected, path);
+        }
+
+        [TestMethod]
+        public void TryAcquire_StaleUnlockedFileDoesNotBlockStartup()
+        {
+            File.WriteAllText(_lockPath, "999999\r\n2000-01-01 00:00:00");
+
+            Assert.IsTrue(SingleInstanceLock.TryAcquire(out var appLock, _lockPath));
+            appLock.Dispose();
+        }
+
+        [TestMethod]
+        public void TryAcquire_LiveExclusiveHandleStillRejectsSecondInstance()
+        {
+            Assert.IsTrue(SingleInstanceLock.TryAcquire(out var first, _lockPath));
+            using (first)
+            {
+                Assert.IsFalse(SingleInstanceLock.TryAcquire(out var second, _lockPath));
+                Assert.IsNull(second);
+            }
+        }
+
+        [TestMethod]
         public void TryAcquire_FailsWhenLockIsAlreadyHeld()
         {
             var firstAcquired = SingleInstanceLock.TryAcquire(out var firstLock, _lockPath);
