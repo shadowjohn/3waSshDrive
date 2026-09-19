@@ -317,6 +317,22 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             Assert.AreEqual(FileSystemBase.STATUS_OBJECT_NAME_NOT_FOUND, missingStatus);
         }
 
+        [TestMethod]
+        public void GetVolumeInfo_ReturnsRemoteVolumeInformation()
+        {
+            var remote = new FakeRemoteFileSystem
+            {
+                VolumeInfo = new RemoteVolumeInfo(500UL * 1024 * 1024 * 1024, 250UL * 1024 * 1024 * 1024)
+            };
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
+
+            var status = fileSystem.GetVolumeInfo(out var volumeInfo);
+
+            Assert.AreEqual(FileSystemBase.STATUS_SUCCESS, status);
+            Assert.AreEqual(500UL * 1024 * 1024 * 1024, volumeInfo.TotalSize);
+            Assert.AreEqual(250UL * 1024 * 1024 * 1024, volumeInfo.FreeSize);
+        }
+
         private static RemoteEntry Directory(string name, string path)
         {
             return new RemoteEntry(name, path, true, 0, Timestamp, Timestamp);

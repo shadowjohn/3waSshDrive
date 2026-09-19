@@ -23,6 +23,8 @@
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\mascot.mp4"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\mascot2.mp4"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\mascot.jpg"
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\app.ico"

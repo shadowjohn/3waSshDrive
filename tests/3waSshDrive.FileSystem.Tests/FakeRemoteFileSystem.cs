@@ -138,6 +138,13 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             return _entries.ContainsKey(path);
         }
 
+        public RemoteVolumeInfo VolumeInfo { get; set; }
+
+        public RemoteVolumeInfo GetVolumeInfo(string path = null)
+        {
+            return VolumeInfo ?? new RemoteVolumeInfo(100UL * 1024 * 1024 * 1024, 50UL * 1024 * 1024 * 1024);
+        }
+
         public void Dispose()
         {
             IsDisposed = true;

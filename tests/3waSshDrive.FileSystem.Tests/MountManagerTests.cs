@@ -95,6 +95,29 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             }, events);
         }
 
+        [TestMethod]
+        public void MountedDrive_EnsureConnected_ReconnectsWhenDisconnected()
+        {
+            var events = new List<string>();
+            var remote = new TrackingRemoteFileSystem(events);
+            var host = new TrackingFileSystemHost(events, 0);
+            var manager = new MountManager(
+                profile => remote,
+                fileSystem => host);
+
+            var mounted = manager.Mount(ValidProfile());
+            Assert.IsTrue(mounted.IsConnected);
+
+            // Simulate network disconnect
+            remote.IsConnected = false;
+            Assert.IsFalse(mounted.IsConnected);
+
+            // Trigger automatic reconnection
+            mounted.EnsureConnected();
+            Assert.IsTrue(mounted.IsConnected);
+            CollectionAssert.Contains(events, "remote.connect");
+        }
+
         private static DriveProfile ValidProfile()
         {
             return new DriveProfile
@@ -119,7 +142,7 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
                 _events = events;
             }
 
-            public bool IsConnected { get; private set; }
+            public bool IsConnected { get; set; }
             public object SyncRoot { get; } = new object();
 
             public void Connect()
@@ -166,6 +189,11 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             public void Rename(string oldPath, string newPath, bool replaceIfExists)
             {
                 throw new NotSupportedException();
+            }
+
+            public RemoteVolumeInfo GetVolumeInfo(string path = null)
+            {
+                return new RemoteVolumeInfo(100UL * 1024 * 1024 * 1024, 50UL * 1024 * 1024 * 1024);
             }
 
             public void Dispose()

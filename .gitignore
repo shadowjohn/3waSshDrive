@@ -6,4 +6,6 @@ TestResults/
 *.suo
 *.nupkg
 artifacts/
-
+log/
+lock.pid
+*.pid

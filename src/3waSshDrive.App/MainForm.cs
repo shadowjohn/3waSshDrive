@@ -6,6 +6,7 @@ using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using ThreeWa.SshDrive.Core.Logging;
 using ThreeWa.SshDrive.Core.Models;
 using ThreeWa.SshDrive.Core.Profiles;
 using ThreeWa.SshDrive.FileSystem.Mounting;
@@ -52,6 +53,8 @@ namespace ThreeWa.SshDrive.App
         private readonly PictureBox _mascotPicture = new PictureBox();
         private System.Windows.Controls.MediaElement _mascotMedia;
         private readonly Timer _mascotLoopTimer = new Timer();
+        private readonly Timer _reconnectTimer = new Timer();
+        private bool _isReconnecting;
         private readonly Label _mascotName = new Label();
         private readonly Label _mascotSpeech = new Label();
         private readonly Panel _speechBubble = new Panel();
@@ -559,7 +562,7 @@ namespace ThreeWa.SshDrive.App
                         LoadedBehavior = System.Windows.Controls.MediaState.Manual,
                         UnloadedBehavior = System.Windows.Controls.MediaState.Manual,
                         IsMuted = true,
-                        Stretch = System.Windows.Media.Stretch.Uniform,
+                        Stretch = System.Windows.Media.Stretch.UniformToFill,
                         Cursor = System.Windows.Input.Cursors.Hand
                     };
                     _mascotMedia.Source = new Uri(videoPath, UriKind.Absolute);
@@ -579,12 +582,46 @@ namespace ThreeWa.SshDrive.App
                         _mascotLoopTimer.Start();
                     };
                     _mascotMedia.MouseLeftButtonUp += (s, e) => CycleMascotQuote();
+
+                    // ponytail: Wrap in ClipToBounds Grid with VerticalAlignment.Center so the character stays centered when height is lower.
+                    var mascotGrid = new System.Windows.Controls.Grid
+                    {
+                        ClipToBounds = true
+                    };
+                    _mascotMedia.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
+                    _mascotMedia.VerticalAlignment = System.Windows.VerticalAlignment.Center;
+                    mascotGrid.Children.Add(_mascotMedia);
+                    mascotGrid.MouseLeftButtonUp += (s, e) => CycleMascotQuote();
+
+                    void UpdateMascotLayout()
+                    {
+                        var w = mascotGrid.ActualWidth;
+                        var h = mascotGrid.ActualHeight;
+                        if (w <= 0 || h <= 0) return;
+                        const double videoAspect = 1280.0 / 720.0;
+                        var containerAspect = h / w;
+                        if (containerAspect < videoAspect)
+                        {
+                            _mascotMedia.Width = w;
+                            _mascotMedia.Height = w * videoAspect;
+                        }
+                        else
+                        {
+                            _mascotMedia.Height = h;
+                            _mascotMedia.Width = h / videoAspect;
+                        }
+                    }
+
+                    mascotGrid.SizeChanged += (s, e) => UpdateMascotLayout();
+                    _mascotMedia.MediaOpened += (s, e) => UpdateMascotLayout();
+
                     var host = new System.Windows.Forms.Integration.ElementHost
                     {
                         Dock = DockStyle.Fill,
-                        Child = _mascotMedia,
+                        Child = mascotGrid,
                         BackColor = Color.FromArgb(240, 246, 254)
                     };
+                    ApplyRoundedRegion(host, 12, Color.FromArgb(226, 232, 240));
                     _mascotMedia.Play();
                     mascotDisplay = host;
                 }
@@ -680,10 +717,16 @@ namespace ThreeWa.SshDrive.App
                 _notifyIcon.Dispose();
                 _mascotLoopTimer.Stop();
                 _mascotLoopTimer.Dispose();
+                _reconnectTimer.Stop();
+                _reconnectTimer.Dispose();
                 _mascotMedia?.Close();
                 DisposeMountedDrives();
             };
             UpdateAuthenticationControls();
+
+            _reconnectTimer.Interval = 10000;
+            _reconnectTimer.Tick += async (s, e) => await CheckAndReconnectDrivesAsync();
+            _reconnectTimer.Start();
         }
 
         private void LoadProfiles()
@@ -873,6 +916,52 @@ namespace ThreeWa.SshDrive.App
             RefreshDriveLetters();
             SetStatus("Unmounted " + drive);
             SetMascotSpeech($"磁碟機 {drive} 已卸載，辛苦啦～隨時點我重新掛載喔！☕");
+        }
+
+        private async Task CheckAndReconnectDrivesAsync()
+        {
+            if (_isReconnecting || _busy || _mountedDrives.Count == 0)
+                return;
+
+            var disconnected = _mountedDrives.Values.Where(d => !d.IsConnected).ToList();
+            if (disconnected.Count == 0)
+                return;
+
+            _isReconnecting = true;
+            try
+            {
+                foreach (var drive in disconnected)
+                {
+                    SetStatus($"磁碟機 {drive.DriveLetter} 連線中斷，正在自動重新連線…", false);
+                    SetMascotSpeech($"偵測到 {drive.DriveLetter} 槽連線中斷，芳寶正在重新連線中…⏳");
+
+                    try
+                    {
+                        await Task.Run(() => drive.EnsureConnected());
+                        SetStatus($"Mounted at {drive.DriveLetter}", true);
+                        SetMascotSpeech($"已成功自動重新連線至 {drive.DriveLetter} 槽！繼續工作吧～✨");
+                        RefreshDriveLetters();
+
+                        if (!Visible)
+                        {
+                            _notifyIcon.ShowBalloonTip(
+                                3000,
+                                "3waSshDrive - 自動重新連線",
+                                $"磁碟機 {drive.DriveLetter} 已成功自動重新連線！",
+                                ToolTipIcon.Info);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        SetStatus($"磁碟機 {drive.DriveLetter} 重新連線失敗，等待下次重試…", false);
+                        CrashLogger.Log("AutoReconnect", ex);
+                    }
+                }
+            }
+            finally
+            {
+                _isReconnecting = false;
+            }
         }
 
         private void OpenExplorer()
@@ -1320,13 +1409,26 @@ namespace ThreeWa.SshDrive.App
 
         private static string FindMascotVideoPath()
         {
-            var candidates = new[]
+            var fileNames = new[] { "mascot2.mp4", "mascot.mp4" };
+            var baseDirs = new[]
             {
-                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "mascot.mp4"),
-                System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(MainForm).Assembly.Location) ?? "", "Assets", "mascot.mp4"),
-                @"D:\mytools\3waSshDrive\src\3waSshDrive.App\Assets\mascot.mp4"
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets"),
+                System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(MainForm).Assembly.Location) ?? "", "Assets"),
+                @"D:\mytools\3waSshDrive\src\3waSshDrive.App\Assets"
             };
-            return candidates.FirstOrDefault(p => !string.IsNullOrEmpty(p) && System.IO.File.Exists(p));
+
+            foreach (var name in fileNames)
+            {
+                foreach (var dir in baseDirs)
+                {
+                    if (string.IsNullOrEmpty(dir)) continue;
+                    var path = System.IO.Path.Combine(dir, name);
+                    if (System.IO.File.Exists(path))
+                        return path;
+                }
+            }
+
+            return null;
         }
 
         private static Image LoadMascotImage()

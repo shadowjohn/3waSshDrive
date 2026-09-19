@@ -25,6 +25,16 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
 
         public string DriveLetter { get; }
 
+        public bool IsConnected => !_disposed && _remote.IsConnected;
+
+        public void EnsureConnected()
+        {
+            if (!_disposed && !_remote.IsConnected)
+            {
+                _remote.Connect();
+            }
+        }
+
         public void Dispose()
         {
             if (_disposed)

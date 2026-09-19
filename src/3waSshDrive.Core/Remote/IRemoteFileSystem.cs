@@ -27,5 +27,7 @@ namespace ThreeWa.SshDrive.Core.Remote
         void DeleteDirectory(string path);
 
         void Rename(string oldPath, string newPath, bool replaceIfExists);
+
+        RemoteVolumeInfo GetVolumeInfo(string path = null);
     }
 }

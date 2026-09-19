@@ -31,12 +31,16 @@ namespace ThreeWa.SshDrive.FileSystem
         // ponytail: short-lived in-memory metadata cache (2s TTL) absorbs bursts of Explorer / IDE queries without SFTP round-trips.
         private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(2);
         private static readonly TimeSpan NegativeCacheTtl = TimeSpan.FromSeconds(1);
+        private static readonly TimeSpan VolumeInfoCacheTtl = TimeSpan.FromSeconds(30);
 
         private readonly ConcurrentDictionary<string, CacheItem<RemoteEntry>> _entryCache =
             new ConcurrentDictionary<string, CacheItem<RemoteEntry>>(StringComparer.OrdinalIgnoreCase);
 
         private readonly ConcurrentDictionary<string, CacheItem<HashSet<string>>> _dirChildrenCache =
             new ConcurrentDictionary<string, CacheItem<HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
+
+        private CacheItem<RemoteVolumeInfo> _volumeInfoCache;
+        private readonly object _volumeInfoLock = new object();
 
         private const uint FILE_WRITE_DATA = 0x0002;
         private const uint FILE_APPEND_DATA = 0x0004;
@@ -155,8 +159,42 @@ namespace ThreeWa.SshDrive.FileSystem
         public override int GetVolumeInfo(out VolumeInfo volumeInfo)
         {
             volumeInfo = default(VolumeInfo);
-            volumeInfo.TotalSize = 1UL << 50;
-            volumeInfo.FreeSize = 1UL << 49;
+            try
+            {
+                CacheItem<RemoteVolumeInfo> cached;
+                lock (_volumeInfoLock)
+                {
+                    cached = _volumeInfoCache;
+                }
+
+                if (cached == null || cached.IsExpired)
+                {
+                    var remoteInfo = _remote.GetVolumeInfo(_remoteRoot);
+                    if (remoteInfo != null && remoteInfo.TotalSize > 0)
+                    {
+                        cached = new CacheItem<RemoteVolumeInfo>(remoteInfo, VolumeInfoCacheTtl);
+                        lock (_volumeInfoLock)
+                        {
+                            _volumeInfoCache = cached;
+                        }
+                    }
+                }
+
+                if (cached != null && cached.Value != null)
+                {
+                    volumeInfo.TotalSize = cached.Value.TotalSize;
+                    volumeInfo.FreeSize = cached.Value.FreeSize;
+                    return STATUS_SUCCESS;
+                }
+            }
+            catch
+            {
+                // Fall back gracefully to default volume info
+            }
+
+            // Fallback default: 100 GB total, 50 GB free
+            volumeInfo.TotalSize = 100UL * 1024 * 1024 * 1024;
+            volumeInfo.FreeSize = 50UL * 1024 * 1024 * 1024;
             return STATUS_SUCCESS;
         }
 

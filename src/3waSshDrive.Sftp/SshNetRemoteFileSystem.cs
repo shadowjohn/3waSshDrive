@@ -47,6 +47,8 @@ namespace ThreeWa.SshDrive.Sftp
                 if (_client?.IsConnected == true)
                     return;
 
+                CleanupClient();
+
                 try
                 {
                     var authentication = CreateAuthenticationMethod();
@@ -156,6 +158,36 @@ namespace ThreeWa.SshDrive.Sftp
             });
         }
 
+        public RemoteVolumeInfo GetVolumeInfo(string path = null)
+        {
+            var targetPath = string.IsNullOrWhiteSpace(path) ? _profile.RemoteRoot : path;
+            return Execute(targetPath, () =>
+            {
+                try
+                {
+                    var status = _client.GetStatus(targetPath);
+                    if (status != null)
+                    {
+                        // ponytail: statvfs block size: fundamental frsize (BlockSize) if > 0, else FileSystemBlockSize, else 4096.
+                        ulong blockSize = status.BlockSize > 0 ? status.BlockSize : (status.FileSystemBlockSize > 0 ? status.FileSystemBlockSize : 4096UL);
+                        ulong totalSize = status.TotalBlocks * blockSize;
+                        ulong freeSize = (status.AvailableBlocks > 0 ? status.AvailableBlocks : status.FreeBlocks) * blockSize;
+                        if (totalSize > 0)
+                        {
+                            return new RemoteVolumeInfo(totalSize, freeSize);
+                        }
+                    }
+                }
+                catch (Exception ex) when (!IsConnectionException(ex))
+                {
+                    // ponytail: statvfs@openssh.com extension is optional; fall back gracefully if unsupported.
+                }
+
+                // Fallback default: 100 GB total, 50 GB free
+                return new RemoteVolumeInfo(100UL * 1024 * 1024 * 1024, 50UL * 1024 * 1024 * 1024);
+            });
+        }
+
         private void Execute(string path, Action operation)
         {
             Execute(path, () =>
@@ -177,19 +209,46 @@ namespace ThreeWa.SshDrive.Sftp
             }
         }
 
+        private void EnsureConnected()
+        {
+            ThrowIfDisposed();
+            if (_client == null || !_client.IsConnected)
+            {
+                Connect();
+            }
+        }
+
+        private static bool IsConnectionException(Exception exception)
+        {
+            return exception is SshConnectionException ||
+                   exception is SshOperationTimeoutException ||
+                   exception is System.Net.Sockets.SocketException ||
+                   exception is IOException ||
+                   exception is ObjectDisposedException;
+        }
+
         private T Execute<T>(string path, Func<T> operation)
         {
             lock (SyncRoot)
             {
-                if (!IsConnected)
-                {
-                    throw new RemoteConnectionException(
-                        "The SSH/SFTP connection is not active.");
-                }
+                EnsureConnected();
 
                 try
                 {
                     return operation();
+                }
+                catch (Exception exception) when (IsConnectionException(exception))
+                {
+                    // ponytail: Disconnect auto-reconnect: if connection dropped during call, reconnect and retry once.
+                    try
+                    {
+                        Connect();
+                        return operation();
+                    }
+                    catch (Exception retryException)
+                    {
+                        throw SshNetExceptionMapper.Translate(retryException, path);
+                    }
                 }
                 catch (Exception exception)
                 {
