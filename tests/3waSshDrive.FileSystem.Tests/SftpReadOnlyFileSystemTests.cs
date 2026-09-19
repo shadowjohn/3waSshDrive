@@ -285,6 +285,38 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             Assert.IsFalse(remote.Exists("/home/dev/del.txt"));
         }
 
+        [TestMethod]
+        public void GetSecurityByName_UsesCache_WhenListingDirectoryFirst()
+        {
+            var remote = new FakeRemoteFileSystem();
+            var root = Directory("", "/home/dev");
+            remote.AddEntry(root);
+            remote.SetDirectory("/home/dev", File("file1.txt", "/home/dev/file1.txt", 10));
+
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
+
+            // Open directory and read entries (populates _entryCache & _dirChildrenCache)
+            fileSystem.Open(
+                @"\", FileSystemBase.FILE_DIRECTORY_FILE, 0,
+                out var node, out var desc, out _, out _);
+            object context = null;
+            while (fileSystem.ReadDirectoryEntry(node, desc, null, null, ref context, out _, out _))
+            {
+            }
+
+            // Remove file1 from remote directly (simulating it was cached)
+            remote.DeleteFile("/home/dev/file1.txt");
+
+            // GetSecurityByName for file1 hits memory cache
+            byte[] sd = null;
+            var status = fileSystem.GetSecurityByName(@"\file1.txt", out var attrs, ref sd);
+            Assert.AreEqual(FileSystemBase.STATUS_SUCCESS, status);
+
+            // Probing a non-existent file like desktop.ini is rejected immediately via parent dir cache
+            var missingStatus = fileSystem.GetSecurityByName(@"\desktop.ini", out _, ref sd);
+            Assert.AreEqual(FileSystemBase.STATUS_OBJECT_NAME_NOT_FOUND, missingStatus);
+        }
+
         private static RemoteEntry Directory(string name, string path)
         {
             return new RemoteEntry(name, path, true, 0, Timestamp, Timestamp);

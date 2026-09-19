@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -13,6 +14,30 @@ namespace ThreeWa.SshDrive.FileSystem
 {
     public sealed class SftpReadOnlyFileSystem : FileSystemBase
     {
+        private sealed class CacheItem<T>
+        {
+            public T Value { get; }
+            public DateTime ExpiresAtUtc { get; }
+
+            public CacheItem(T value, TimeSpan ttl)
+            {
+                Value = value;
+                ExpiresAtUtc = DateTime.UtcNow + ttl;
+            }
+
+            public bool IsExpired => DateTime.UtcNow > ExpiresAtUtc;
+        }
+
+        // ponytail: short-lived in-memory metadata cache (2s TTL) absorbs bursts of Explorer / IDE queries without SFTP round-trips.
+        private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan NegativeCacheTtl = TimeSpan.FromSeconds(1);
+
+        private readonly ConcurrentDictionary<string, CacheItem<RemoteEntry>> _entryCache =
+            new ConcurrentDictionary<string, CacheItem<RemoteEntry>>(StringComparer.OrdinalIgnoreCase);
+
+        private readonly ConcurrentDictionary<string, CacheItem<HashSet<string>>> _dirChildrenCache =
+            new ConcurrentDictionary<string, CacheItem<HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
+
         private const uint FILE_WRITE_DATA = 0x0002;
         private const uint FILE_APPEND_DATA = 0x0004;
         private const uint GENERIC_WRITE = 0x40000000;
@@ -32,13 +57,79 @@ namespace ThreeWa.SshDrive.FileSystem
             ReadOnly = readOnly;
         }
 
+        private RemoteEntry GetCachedEntry(string mappedPath)
+        {
+            if (_entryCache.TryGetValue(mappedPath, out var cached) && !cached.IsExpired)
+            {
+                if (cached.Value == null)
+                    throw new RemotePathNotFoundException(mappedPath);
+                return cached.Value;
+            }
+
+            var parent = GetParentPath(mappedPath);
+            var name = GetName(mappedPath);
+            if (_dirChildrenCache.TryGetValue(parent, out var dirChildren) && !dirChildren.IsExpired)
+            {
+                if (!dirChildren.Value.Contains(name))
+                {
+                    _entryCache[mappedPath] = new CacheItem<RemoteEntry>(null, NegativeCacheTtl);
+                    throw new RemotePathNotFoundException(mappedPath);
+                }
+            }
+
+            try
+            {
+                var entry = _remote.GetEntry(mappedPath);
+                _entryCache[mappedPath] = new CacheItem<RemoteEntry>(entry, CacheTtl);
+                return entry;
+            }
+            catch (RemotePathNotFoundException)
+            {
+                _entryCache[mappedPath] = new CacheItem<RemoteEntry>(null, NegativeCacheTtl);
+                throw;
+            }
+        }
+
+        private void InvalidateCache(string mappedPath)
+        {
+            if (string.IsNullOrEmpty(mappedPath))
+                return;
+
+            _entryCache.TryRemove(mappedPath, out _);
+            var parent = GetParentPath(mappedPath);
+            _dirChildrenCache.TryRemove(parent, out _);
+            _entryCache.TryRemove(parent, out _);
+        }
+
+        private void UpdateCachedEntry(RemoteEntry entry)
+        {
+            if (entry == null || string.IsNullOrEmpty(entry.FullPath))
+                return;
+
+            _entryCache[entry.FullPath] = new CacheItem<RemoteEntry>(entry, CacheTtl);
+            var parent = GetParentPath(entry.FullPath);
+            _dirChildrenCache.TryRemove(parent, out _);
+        }
+
+        private static string GetParentPath(string path)
+        {
+            var normalized = (path ?? string.Empty).TrimEnd('/');
+            var lastIndex = normalized.LastIndexOf('/');
+            if (lastIndex <= 0)
+                return "/";
+            return normalized.Substring(0, lastIndex);
+        }
+
         public override int Init(object hostObject)
         {
             var host = (FileSystemHost)hostObject;
             host.SectorSize = 4096;
             host.SectorsPerAllocationUnit = 1;
             host.MaxComponentLength = 255;
-            host.FileInfoTimeout = 1000;
+            host.FileInfoTimeout = 2000;
+            host.DirInfoTimeout = 2000;
+            host.SecurityTimeout = 2000;
+            host.VolumeInfoTimeout = 60000;
             host.CaseSensitiveSearch = true;
             host.CasePreservedNames = true;
             host.UnicodeOnDisk = true;
@@ -77,7 +168,7 @@ namespace ThreeWa.SshDrive.FileSystem
             fileAttributes = 0;
             try
             {
-                var entry = _remote.GetEntry(MapPath(fileName));
+                var entry = GetCachedEntry(MapPath(fileName));
                 fileAttributes = WinFspFileInfoMapper.GetAttributes(entry);
                 securityDescriptor = null;
                 return STATUS_SUCCESS;
@@ -131,6 +222,8 @@ namespace ThreeWa.SshDrive.FileSystem
                         DateTime.UtcNow);
                 }
 
+                UpdateCachedEntry(entry);
+
                 var handle = new RemoteFileHandle(entry, stream);
                 if ((createOptions & FILE_DELETE_ON_CLOSE) != 0)
                     handle.DeleteOnClose = true;
@@ -163,13 +256,12 @@ namespace ThreeWa.SshDrive.FileSystem
             try
             {
                 var mappedPath = MapPath(fileName);
-                var entry = _remote.GetEntry(mappedPath);
+                var entry = GetCachedEntry(mappedPath);
                 Stream stream = null;
 
                 if (!entry.IsDirectory)
                 {
-                    bool wantsWrite = !ReadOnly && (grantedAccess & (FILE_WRITE_DATA | FILE_APPEND_DATA | GENERIC_WRITE)) != 0;
-                    stream = wantsWrite
+                    stream = !ReadOnly
                         ? _remote.OpenFile(entry.FullPath, FileMode.Open, FileAccess.ReadWrite)
                         : _remote.OpenRead(entry.FullPath);
                 }
@@ -207,7 +299,7 @@ namespace ThreeWa.SshDrive.FileSystem
                 if (handle.Entry.IsDirectory)
                     return STATUS_FILE_IS_A_DIRECTORY;
 
-                lock (handle.SyncRoot)
+                lock (_remote.SyncRoot)
                 {
                     handle.Stream.SetLength(0);
                 }
@@ -220,6 +312,8 @@ namespace ThreeWa.SshDrive.FileSystem
                     DateTime.UtcNow,
                     DateTime.UtcNow);
 
+                UpdateCachedEntry(handle.Entry);
+
                 fileInfo = WinFspFileInfoMapper.Map(handle.Entry);
                 return STATUS_SUCCESS;
             }
@@ -231,7 +325,14 @@ namespace ThreeWa.SshDrive.FileSystem
 
         public override void Close(object fileNode, object fileDesc)
         {
-            (fileDesc as RemoteFileHandle)?.Dispose();
+            var handle = fileDesc as RemoteFileHandle;
+            if (handle != null)
+            {
+                lock (_remote.SyncRoot)
+                {
+                    handle.Dispose();
+                }
+            }
         }
 
         public override void Cleanup(
@@ -246,14 +347,18 @@ namespace ThreeWa.SshDrive.FileSystem
 
             if (!ReadOnly && ((flags & CleanupDelete) != 0 || handle.DeleteOnClose))
             {
+                var mappedPath = MapPath(fileName);
                 try
                 {
-                    handle.Dispose();
-                    var mappedPath = MapPath(fileName);
-                    if (handle.Entry.IsDirectory)
-                        _remote.DeleteDirectory(mappedPath);
-                    else
-                        _remote.DeleteFile(mappedPath);
+                    lock (_remote.SyncRoot)
+                    {
+                        handle.Dispose();
+                        if (handle.Entry.IsDirectory)
+                            _remote.DeleteDirectory(mappedPath);
+                        else
+                            _remote.DeleteFile(mappedPath);
+                    }
+                    InvalidateCache(mappedPath);
                 }
                 catch
                 {
@@ -284,9 +389,11 @@ namespace ThreeWa.SshDrive.FileSystem
                 var bytes = new byte[requested];
                 var total = 0;
 
-                lock (handle.SyncRoot)
+                lock (_remote.SyncRoot)
                 {
-                    handle.Stream.Seek((long)offset, SeekOrigin.Begin);
+                    if (handle.Stream.Position != (long)offset)
+                        handle.Stream.Seek((long)offset, SeekOrigin.Begin);
+
                     while (total < requested)
                     {
                         var read = handle.Stream.Read(bytes, total, requested - total);
@@ -329,24 +436,29 @@ namespace ThreeWa.SshDrive.FileSystem
                 if (handle.Entry.IsDirectory)
                     return STATUS_FILE_IS_A_DIRECTORY;
 
-                if (constrainedIo)
-                {
-                    var currentLength = (ulong)handle.Stream.Length;
-                    if (offset >= currentLength)
-                        return STATUS_SUCCESS;
-                    if (offset + length > currentLength)
-                        length = (uint)(currentLength - offset);
-                }
-
                 var bytes = new byte[length];
                 Marshal.Copy(buffer, bytes, 0, (int)length);
 
-                lock (handle.SyncRoot)
+                lock (_remote.SyncRoot)
                 {
+                    if (constrainedIo)
+                    {
+                        var currentLength = (ulong)handle.Stream.Length;
+                        if (offset >= currentLength)
+                            return STATUS_SUCCESS;
+                        if (offset + length > currentLength)
+                            length = (uint)(currentLength - offset);
+                    }
+
                     if (writeToEndOfFile)
-                        handle.Stream.Seek(0, SeekOrigin.End);
-                    else
+                    {
+                        if (handle.Stream.Position != handle.Stream.Length)
+                            handle.Stream.Seek(0, SeekOrigin.End);
+                    }
+                    else if (handle.Stream.Position != (long)offset)
+                    {
                         handle.Stream.Seek((long)offset, SeekOrigin.Begin);
+                    }
 
                     handle.Stream.Write(bytes, 0, (int)length);
 
@@ -360,6 +472,7 @@ namespace ThreeWa.SshDrive.FileSystem
                             newLength,
                             DateTime.UtcNow,
                             DateTime.UtcNow);
+                        UpdateCachedEntry(handle.Entry);
                     }
                 }
 
@@ -383,7 +496,7 @@ namespace ThreeWa.SshDrive.FileSystem
             {
                 try
                 {
-                    lock (handle.SyncRoot)
+                    lock (_remote.SyncRoot)
                     {
                         handle.Stream.Flush();
                     }
@@ -418,7 +531,7 @@ namespace ThreeWa.SshDrive.FileSystem
                 if (handle.Entry.IsDirectory)
                     return STATUS_FILE_IS_A_DIRECTORY;
 
-                lock (handle.SyncRoot)
+                lock (_remote.SyncRoot)
                 {
                     if (!setAllocationSize || (ulong)handle.Stream.Length > newSize)
                     {
@@ -432,6 +545,7 @@ namespace ThreeWa.SshDrive.FileSystem
                         handle.Stream.Length,
                         DateTime.UtcNow,
                         DateTime.UtcNow);
+                    UpdateCachedEntry(handle.Entry);
                 }
 
                 fileInfo = WinFspFileInfoMapper.Map(handle.Entry);
@@ -513,6 +627,8 @@ namespace ThreeWa.SshDrive.FileSystem
                 var oldMapped = MapPath(fileName);
                 var newMapped = MapPath(newFileName);
                 _remote.Rename(oldMapped, newMapped, replaceIfExists);
+                InvalidateCache(oldMapped);
+                InvalidateCache(newMapped);
                 return STATUS_SUCCESS;
             }
             catch (Exception exception)
@@ -566,11 +682,29 @@ namespace ThreeWa.SshDrive.FileSystem
 
         private IReadOnlyList<RemoteEntry> LoadDirectoryEntries(RemoteEntry directory)
         {
-            var entries = _remote.ListDirectory(directory.FullPath)
-                .Where(entry => entry.Name != "." && entry.Name != "..")
-                .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(entry => entry.Name, StringComparer.Ordinal)
-                .ToList();
+            var rawEntries = _remote.ListDirectory(directory.FullPath);
+
+            var childNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var entries = new List<RemoteEntry>(rawEntries.Count);
+
+            foreach (var item in rawEntries)
+            {
+                if (item.Name == "." || item.Name == "..")
+                    continue;
+
+                _entryCache[item.FullPath] = new CacheItem<RemoteEntry>(item, CacheTtl);
+                childNames.Add(item.Name);
+                entries.Add(item);
+            }
+
+            _dirChildrenCache[directory.FullPath] = new CacheItem<HashSet<string>>(childNames, CacheTtl);
+            _entryCache[directory.FullPath] = new CacheItem<RemoteEntry>(directory, CacheTtl);
+
+            entries.Sort((a, b) =>
+            {
+                var comp = string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                return comp != 0 ? comp : string.Compare(a.Name, b.Name, StringComparison.Ordinal);
+            });
 
             entries.Insert(0, new RemoteEntry(
                 ".",

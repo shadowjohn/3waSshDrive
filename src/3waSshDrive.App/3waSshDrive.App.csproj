@@ -3,8 +3,14 @@
     <TargetFramework>net472</TargetFramework>
     <OutputType>WinExe</OutputType>
     <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <RootNamespace>ThreeWa.SshDrive.App</RootNamespace>
     <AssemblyName>3waSshDrive</AssemblyName>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Version>2026091901</Version>
+    <AssemblyVersion>2026.09.19.01</AssemblyVersion>
+    <FileVersion>2026.09.19.01</FileVersion>
+    <Authors>羽山 (秋人)</Authors>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\3waSshDrive.Core\3waSshDrive.Core.csproj" />
@@ -15,5 +21,23 @@
     <None Include="..\..\runtime\winfsp-2.1.25156-manifest.json"
           Link="runtime\winfsp-2.1.25156-manifest.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\mascot.mp4"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\mascot.jpg"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\app.ico"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\avatar_prompt.txt"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\header_logo.png"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\mascot_card.png"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\mascot.jpg" />
+    <EmbeddedResource Include="Assets\app.ico" />
+    <EmbeddedResource Include="Assets\header_logo.png" />
+    <EmbeddedResource Include="Assets\mascot_card.png" />
   </ItemGroup>
 </Project>

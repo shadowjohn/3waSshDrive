@@ -14,6 +14,8 @@ namespace ThreeWa.SshDrive.App
 {
     internal sealed class MainForm : Form
     {
+        public const string AppVersion = "2026091901";
+
         private readonly ProfileStore _profileStore;
         private readonly SshConnectionProbe _connectionProbe;
         private readonly MountManager _mountManager;
@@ -37,11 +39,33 @@ namespace ThreeWa.SshDrive.App
         private readonly Button _saveButton = new Button();
         private readonly Button _deleteButton = new Button();
         private readonly Button _browseButton = new Button();
+        private readonly Button _testAndMountButton = new Button();
         private readonly Button _testButton = new Button();
         private readonly Button _mountButton = new Button();
         private readonly Button _unmountButton = new Button();
         private readonly Button _explorerButton = new Button();
         private readonly Button _installDriverButton = new Button();
+        private readonly Label _statusDot = new Label();
+        private readonly Label _statusTimestamp = new Label();
+        private readonly NotifyIcon _notifyIcon = new NotifyIcon();
+        private readonly PictureBox _mascotPicture = new PictureBox();
+        private System.Windows.Controls.MediaElement _mascotMedia;
+        private readonly Label _mascotName = new Label();
+        private readonly Label _mascotSpeech = new Label();
+        private readonly Panel _speechBubble = new Panel();
+        private int _mascotQuoteIndex;
+        private static readonly string[] MascotQuotes = new[]
+        {
+            "把遠端 Linux 掛載成本地磁碟，用 Antigravity 寫程式超順手～✨",
+            "3WA 問題解決專家工作室，隨時為您待命～ฅ^•ﻌ•^ฅ",
+            "讀寫功能已全面開放！直接在 Windows 編輯 Linux 上的檔案吧～",
+            "現在有極速 Metadata 快取，檔案總管瀏覽滑順不卡頓！🚀",
+            "右上角按 X 會最小化到右下角系統匣，我會默默守護連線～☕",
+            "今天寫程式辛苦啦！多喝水、站起來活動一下筋骨喔～",
+            "支援 Private Key 與 Password 兩種登入模式，安全又便利！",
+            "點擊我隨時聽我說話～喵～ฅ'ω'ฅ"
+        };
+        private bool _isExplicitExit;
 
         private List<DriveProfile> _profileItems = new List<DriveProfile>();
         private string _selectedProfileName;
@@ -64,16 +88,22 @@ namespace ThreeWa.SshDrive.App
             _connectionProbe = connectionProbe ?? throw new ArgumentNullException(nameof(connectionProbe));
             _mountManager = mountManager ?? throw new ArgumentNullException(nameof(mountManager));
 
-            Text = "3waSshDrive";
+            Text = $"3waSshDrive - {AppVersion}";
             StartPosition = FormStartPosition.CenterScreen;
-            MinimumSize = new Size(760, 520);
-            Size = new Size(840, 580);
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
+            MinimumSize = new Size(1080, 750);
+            Size = new Size(1100, 760);
+            BackColor = Color.FromArgb(240, 246, 254);
+            Font = new Font("Segoe UI", 9.2F, FontStyle.Regular, GraphicsUnit.Point);
+
+            var appIcon = LoadAppIcon();
+            if (appIcon != null)
+                Icon = appIcon;
 
             BuildInterface();
             WireEvents();
             LoadProfiles();
             RefreshDriverStatus();
+            SetupTrayIcon();
         }
 
         private void BuildInterface()
@@ -81,34 +111,206 @@ namespace ThreeWa.SshDrive.App
             var page = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(18),
+                Padding = new Padding(24, 16, 24, 14),
                 ColumnCount = 1,
-                RowCount = 4
+                RowCount = 3,
+                BackColor = Color.FromArgb(240, 246, 254)
             };
-            page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            page.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
             page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            page.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
 
-            var title = new Label
-            {
-                AutoSize = true,
-                Font = new Font(Font.FontFamily, 16F, FontStyle.Bold),
-                Text = "Linux workspace → Windows drive",
-                Margin = new Padding(0, 0, 0, 14)
-            };
-            page.Controls.Add(title, 0, 0);
-
-            var fields = new TableLayoutPanel
+            // 1. Header Bar
+            var header = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 3,
-                RowCount = 12,
-                AutoSize = true
+                RowCount = 1,
+                Margin = new Padding(0, 0, 0, 8)
             };
-            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+            var logoBox = new PictureBox
+            {
+                Size = new Size(64, 58),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Image = LoadHeaderLogo(),
+                Margin = new Padding(0, 2, 8, 0)
+            };
+            header.Controls.Add(logoBox, 0, 0);
+
+            var titlePanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                Margin = new Padding(0, 4, 0, 0)
+            };
+            var title = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 18F, FontStyle.Bold),
+                ForeColor = Color.FromArgb(15, 23, 42),
+                Text = "3waSshDrive",
+                Margin = new Padding(0, 0, 0, 2)
+            };
+            var subTitle = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 10F, FontStyle.Regular),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Text = "Linux workspace  →  Windows drive"
+            };
+            titlePanel.Controls.Add(title);
+            titlePanel.Controls.Add(subTitle);
+            header.Controls.Add(titlePanel, 1, 0);
+
+            var rightHeader = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.RightToLeft,
+                WrapContents = false,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Margin = new Padding(0, 8, 0, 0)
+            };
+
+            var aboutButton = new Button
+            {
+                Text = "ℹ 關於",
+                AutoSize = true,
+                FlatStyle = FlatStyle.Flat,
+                FlatAppearance = { BorderColor = Color.FromArgb(191, 219, 254) },
+                BackColor = Color.FromArgb(239, 246, 255),
+                ForeColor = Color.FromArgb(29, 78, 216),
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                Height = 32,
+                Padding = new Padding(10, 2, 10, 2),
+                Margin = new Padding(12, 6, 0, 0)
+            };
+            aboutButton.Click += (sender, args) => ShowAboutDialog();
+
+            var sloganPanel = new TableLayoutPanel
+            {
+                AutoSize = true,
+                ColumnCount = 1,
+                RowCount = 2,
+                Margin = new Padding(0, 4, 0, 0)
+            };
+            sloganPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            sloganPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            sloganPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+            var slogan1 = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Text = "Linux 的工作空間",
+                Anchor = AnchorStyles.Right
+            };
+            var slogan2 = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Text = "就在 Windows 觸手可及",
+                Anchor = AnchorStyles.Right
+            };
+            sloganPanel.Controls.Add(slogan1, 0, 0);
+            sloganPanel.Controls.Add(slogan2, 0, 1);
+
+            rightHeader.Controls.Add(aboutButton);
+            rightHeader.Controls.Add(sloganPanel);
+            header.Controls.Add(rightHeader, 2, 0);
+
+            page.Controls.Add(header, 0, 0);
+
+            // 2. Main Content Split: Left (Settings Card) vs Right (Mascot Panel)
+            var mainLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1
+            };
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 335));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            // Left Card (White rounded card look)
+            var leftCard = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.White,
+                Padding = new Padding(16, 12, 16, 12),
+                Margin = new Padding(0, 0, 14, 0)
+            };
+
+            var leftLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3
+            };
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+
+            // Section Header
+            var sectionHeader = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Margin = new Padding(0)
+            };
+            var sectionIcon = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 12F, FontStyle.Regular),
+                ForeColor = Color.FromArgb(37, 99, 235),
+                Text = "⚙",
+                Margin = new Padding(0, 1, 4, 0)
+            };
+            var sectionTitle = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 11.5F, FontStyle.Bold),
+                ForeColor = Color.FromArgb(15, 23, 42),
+                Text = "連線設定 Connection Settings",
+                Margin = new Padding(0, 2, 8, 0)
+            };
+            var sectionDesc = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 8.8F, FontStyle.Regular),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Text = "Mount a Linux workspace as a Windows drive over SSH.",
+                Margin = new Padding(0, 5, 0, 0)
+            };
+            sectionHeader.Controls.Add(sectionIcon);
+            sectionHeader.Controls.Add(sectionTitle);
+            sectionHeader.Controls.Add(sectionDesc);
+            leftLayout.Controls.Add(sectionHeader, 0, 0);
+
+            // Form Fields Table
+            var fields = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 4,
+                RowCount = 12,
+                Margin = new Padding(0, 2, 0, 2)
+            };
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 26));
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            for (var r = 0; r < 12; r++)
+            {
+                fields.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / 12f));
+            }
 
             ConfigureComboBox(_profiles);
             ConfigureComboBox(_driveLetter);
@@ -123,24 +325,46 @@ namespace ThreeWa.SshDrive.App
             _port.Minimum = 1;
             _port.Maximum = 65535;
             _port.Value = 22;
-            _port.Width = 120;
+            _port.Width = 100;
             _remoteRoot.Text = "/";
             _password.UseSystemPasswordChar = true;
             _hostFingerprint.ReadOnly = true;
             _readOnly.Text = "Read-only (唯讀模式)";
             _readOnly.AutoSize = true;
+            _readOnly.Anchor = AnchorStyles.Left;
 
-            _newButton.Text = "New";
-            _saveButton.Text = "Save";
-            _deleteButton.Text = "Delete";
-            _browseButton.Text = "Browse…";
-            _testButton.Text = "Test && Trust";
-            _mountButton.Text = "Mount";
-            _unmountButton.Text = "Unmount";
-            _explorerButton.Text = "Open Explorer";
-            _installDriverButton.Text = "安裝 WinFsp 驅動";
-            _installDriverButton.AutoSize = true;
-            _installDriverButton.Visible = false;
+            // Profile Button Group: + New, Save, Delete
+            _newButton.Text = "+ New";
+            _newButton.FlatStyle = FlatStyle.Flat;
+            _newButton.FlatAppearance.BorderColor = Color.FromArgb(191, 219, 254);
+            _newButton.BackColor = Color.FromArgb(239, 246, 255);
+            _newButton.ForeColor = Color.FromArgb(29, 78, 216);
+            _newButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _newButton.Cursor = Cursors.Hand;
+            _newButton.Height = 27;
+
+            _saveButton.Text = "💾 Save";
+            _saveButton.FlatStyle = FlatStyle.Flat;
+            _saveButton.FlatAppearance.BorderColor = Color.FromArgb(191, 219, 254);
+            _saveButton.BackColor = Color.FromArgb(239, 246, 255);
+            _saveButton.ForeColor = Color.FromArgb(29, 78, 216);
+            _saveButton.Cursor = Cursors.Hand;
+            _saveButton.Height = 27;
+
+            _deleteButton.Text = "🗑 Delete";
+            _deleteButton.FlatStyle = FlatStyle.Flat;
+            _deleteButton.FlatAppearance.BorderColor = Color.FromArgb(254, 202, 202);
+            _deleteButton.BackColor = Color.FromArgb(254, 242, 242);
+            _deleteButton.ForeColor = Color.FromArgb(185, 28, 28);
+            _deleteButton.Cursor = Cursors.Hand;
+            _deleteButton.Height = 27;
+
+            _browseButton.Text = "📁 Browse…";
+            _browseButton.FlatStyle = FlatStyle.Flat;
+            _browseButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+            _browseButton.BackColor = Color.FromArgb(248, 250, 252);
+            _browseButton.Height = 26;
+            _browseButton.Cursor = Cursors.Hand;
 
             var profileButtons = new FlowLayoutPanel
             {
@@ -153,41 +377,231 @@ namespace ThreeWa.SshDrive.App
             profileButtons.Controls.Add(_saveButton);
             profileButtons.Controls.Add(_deleteButton);
 
-            AddRow(fields, 0, "Profile", _profiles, profileButtons);
-            AddRow(fields, 1, "Name", _name, null);
-            AddRow(fields, 2, "Host", _host, null);
-            AddRow(fields, 3, "Port", _port, null);
-            AddRow(fields, 4, "Username", _username, null);
-            AddRow(fields, 5, "Remote root", _remoteRoot, null);
-            AddRow(fields, 6, "Drive letter", _driveLetter, null);
-            AddRow(fields, 7, "Authentication", _authenticationMode, null);
-            AddRow(fields, 8, "Private key", _privateKeyPath, _browseButton);
-            AddRow(fields, 9, "Password", _password, null);
-            AddRow(fields, 10, "Host fingerprint", _hostFingerprint, null);
-            AddRow(fields, 11, "Options", _readOnly, null);
-            page.Controls.Add(fields, 0, 1);
+            AddRow(fields, 0, "❯", "Profile", _profiles, profileButtons);
+            AddRow(fields, 1, "👤", "Name", _name, null);
+            AddRow(fields, 2, "🌐", "Host", _host, null);
+            AddRow(fields, 3, "🖧", "Port", _port, null);
+            AddRow(fields, 4, "👤", "Username", _username, null);
+            AddRow(fields, 5, "📁", "Remote root", _remoteRoot, null);
+            AddRow(fields, 6, "💽", "Drive letter", _driveLetter, null);
+            AddRow(fields, 7, "🛡", "Authentication", _authenticationMode, null);
+            AddRow(fields, 8, "🔑", "Private key", _privateKeyPath, _browseButton);
+            AddRow(fields, 9, "🔒", "Password", _password, null);
+            AddRow(fields, 10, "🔏", "Host fingerprint", _hostFingerprint, null);
+            AddRow(fields, 11, "⚙", "Options", _readOnly, null);
+            leftLayout.Controls.Add(fields, 0, 1);
 
-            var actions = new FlowLayoutPanel
+            // Action Buttons Bar
+            var actions = new TableLayoutPanel
             {
-                AutoSize = true,
                 Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.LeftToRight,
-                Padding = new Padding(0, 14, 0, 8)
+                ColumnCount = 5,
+                RowCount = 1,
+                Margin = new Padding(0, 4, 0, 0)
             };
-            actions.Controls.Add(_testButton);
-            actions.Controls.Add(_mountButton);
-            actions.Controls.Add(_installDriverButton);
-            actions.Controls.Add(_unmountButton);
-            actions.Controls.Add(_explorerButton);
-            page.Controls.Add(actions, 0, 2);
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28)); // Test & Mount
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24)); // Mount
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24)); // Unmount
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24)); // Open Explorer
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // Driver install (if needed)
 
+            // 1. Test & Mount (Primary highlighted blue card)
+            _testAndMountButton.Text = "▶  Test & Mount\n    測試連線並掛載";
+            _testAndMountButton.Dock = DockStyle.Fill;
+            _testAndMountButton.FlatStyle = FlatStyle.Flat;
+            _testAndMountButton.FlatAppearance.BorderSize = 0;
+            _testAndMountButton.BackColor = Color.FromArgb(29, 114, 232);
+            _testAndMountButton.ForeColor = Color.White;
+            _testAndMountButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _testAndMountButton.Cursor = Cursors.Hand;
+            _testAndMountButton.Padding = new Padding(0, 2, 0, 2);
+            _testAndMountButton.Margin = new Padding(0, 0, 8, 0);
+
+            // 2. Mount
+            _mountButton.Text = "💽  Mount\n     掛載";
+            _mountButton.Dock = DockStyle.Fill;
+            _mountButton.FlatStyle = FlatStyle.Flat;
+            _mountButton.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
+            _mountButton.BackColor = Color.FromArgb(248, 250, 252);
+            _mountButton.ForeColor = Color.FromArgb(30, 41, 59);
+            _mountButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _mountButton.Cursor = Cursors.Hand;
+            _mountButton.Padding = new Padding(0, 2, 0, 2);
+            _mountButton.Margin = new Padding(0, 0, 8, 0);
+
+            // 3. Unmount
+            _unmountButton.Text = "⏏  Unmount\n    卸載";
+            _unmountButton.Dock = DockStyle.Fill;
+            _unmountButton.FlatStyle = FlatStyle.Flat;
+            _unmountButton.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
+            _unmountButton.BackColor = Color.FromArgb(248, 250, 252);
+            _unmountButton.ForeColor = Color.FromArgb(71, 85, 105);
+            _unmountButton.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
+            _unmountButton.Cursor = Cursors.Hand;
+            _unmountButton.Padding = new Padding(0, 2, 0, 2);
+            _unmountButton.Margin = new Padding(0, 0, 8, 0);
+
+            // 4. Open Explorer
+            _explorerButton.Text = "📁  Open\n    開啟資料夾";
+            _explorerButton.Dock = DockStyle.Fill;
+            _explorerButton.FlatStyle = FlatStyle.Flat;
+            _explorerButton.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
+            _explorerButton.BackColor = Color.FromArgb(248, 250, 252);
+            _explorerButton.ForeColor = Color.FromArgb(71, 85, 105);
+            _explorerButton.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
+            _explorerButton.Cursor = Cursors.Hand;
+            _explorerButton.Padding = new Padding(0, 2, 0, 2);
+            _explorerButton.Margin = new Padding(0);
+
+            // 5. Install Driver Button (hidden when driver is present)
+            _installDriverButton.Text = "⚙ 安裝 WinFsp 驅動";
+            _installDriverButton.FlatStyle = FlatStyle.Flat;
+            _installDriverButton.FlatAppearance.BorderColor = Color.FromArgb(252, 211, 77);
+            _installDriverButton.BackColor = Color.FromArgb(254, 243, 199);
+            _installDriverButton.ForeColor = Color.FromArgb(180, 83, 9);
+            _installDriverButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _installDriverButton.Cursor = Cursors.Hand;
+            _installDriverButton.Visible = false;
+            _installDriverButton.Height = 44;
+            _installDriverButton.Margin = new Padding(8, 0, 0, 0);
+
+            actions.Controls.Add(_testAndMountButton, 0, 0);
+            actions.Controls.Add(_mountButton, 1, 0);
+            actions.Controls.Add(_unmountButton, 2, 0);
+            actions.Controls.Add(_explorerButton, 3, 0);
+            actions.Controls.Add(_installDriverButton, 4, 0);
+            leftLayout.Controls.Add(actions, 0, 2);
+
+            leftCard.Controls.Add(leftLayout);
+            mainLayout.Controls.Add(leftCard, 0, 0);
+
+            // Mascot Right Column (Speech Bubble + Mascot Illustration Card)
+            var mascotColumn = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                Margin = new Padding(0)
+            };
+            mascotColumn.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
+            mascotColumn.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            // Speech Bubble (Warm amber card background with rounded feel)
+            _speechBubble.Dock = DockStyle.Fill;
+            _speechBubble.BackColor = Color.FromArgb(255, 251, 240);
+            _speechBubble.BorderStyle = BorderStyle.FixedSingle;
+            _speechBubble.Padding = new Padding(14, 8, 14, 8);
+            _speechBubble.Cursor = Cursors.Hand;
+            _speechBubble.Margin = new Padding(0, 0, 0, 8);
+
+            _mascotName.Text = "💡  三哇娘 (3WA-chan)";
+            _mascotName.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+            _mascotName.ForeColor = Color.FromArgb(217, 119, 6);
+            _mascotName.Dock = DockStyle.Top;
+            _mascotName.AutoSize = true;
+            _mascotName.Cursor = Cursors.Hand;
+            _mascotName.Margin = new Padding(0, 0, 0, 4);
+
+            _mascotSpeech.Text = MascotQuotes[0];
+            _mascotSpeech.Font = new Font("Segoe UI", 9.2F, FontStyle.Regular);
+            _mascotSpeech.ForeColor = Color.FromArgb(51, 65, 85);
+            _mascotSpeech.Dock = DockStyle.Fill;
+            _mascotSpeech.Cursor = Cursors.Hand;
+
+            _speechBubble.Controls.Add(_mascotSpeech);
+            _speechBubble.Controls.Add(_mascotName);
+
+            // Mascot Picture (Loaded with mascot_card.png)
+            _mascotPicture.Dock = DockStyle.Fill;
+            _mascotPicture.SizeMode = PictureBoxSizeMode.Zoom;
+            _mascotPicture.Cursor = Cursors.Hand;
+            _mascotPicture.Image = LoadMascotImage();
+
+            Control mascotDisplay = _mascotPicture;
+            var videoPath = FindMascotVideoPath();
+            if (!string.IsNullOrEmpty(videoPath))
+            {
+                try
+                {
+                    _mascotMedia = new System.Windows.Controls.MediaElement
+                    {
+                        LoadedBehavior = System.Windows.Controls.MediaState.Manual,
+                        UnloadedBehavior = System.Windows.Controls.MediaState.Manual,
+                        IsMuted = true,
+                        Stretch = System.Windows.Media.Stretch.Uniform,
+                        Cursor = System.Windows.Input.Cursors.Hand
+                    };
+                    _mascotMedia.Source = new Uri(videoPath, UriKind.Absolute);
+                    _mascotMedia.MediaEnded += (s, e) =>
+                    {
+                        _mascotMedia.Position = TimeSpan.Zero;
+                        _mascotMedia.Play();
+                    };
+                    _mascotMedia.MouseLeftButtonUp += (s, e) => CycleMascotQuote();
+                    var host = new System.Windows.Forms.Integration.ElementHost
+                    {
+                        Dock = DockStyle.Fill,
+                        Child = _mascotMedia,
+                        BackColor = Color.FromArgb(240, 246, 254)
+                    };
+                    _mascotMedia.Play();
+                    mascotDisplay = host;
+                }
+                catch
+                {
+                    _mascotMedia = null;
+                }
+            }
+
+            var tip = new ToolTip();
+            tip.SetToolTip(_mascotPicture, "點我互動！(Click me)");
+            if (mascotDisplay != _mascotPicture)
+                tip.SetToolTip(mascotDisplay, "點我互動！(Click me)");
+            tip.SetToolTip(_speechBubble, "點我互動！(Click me)");
+
+            mascotColumn.Controls.Add(_speechBubble, 0, 0);
+            mascotColumn.Controls.Add(mascotDisplay, 0, 1);
+
+            mainLayout.Controls.Add(mascotColumn, 1, 0);
+            page.Controls.Add(mainLayout, 0, 1);
+
+            // 3. Bottom Status Bar (Status indicator + message + timestamp)
+            var statusBar = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 1,
+                Margin = new Padding(0, 6, 0, 0)
+            };
+            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 18));
+            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+            _statusDot.Text = "●";
+            _statusDot.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+            _statusDot.ForeColor = Color.FromArgb(34, 197, 94); // Vibrant Green
+            _statusDot.AutoSize = true;
+            _statusDot.Anchor = AnchorStyles.Left;
+
+            _status.Text = "Profile loaded";
+            _status.Font = new Font("Segoe UI", 8.8F, FontStyle.Regular);
+            _status.ForeColor = Color.FromArgb(71, 85, 105);
             _status.AutoSize = true;
-            _status.ForeColor = Color.FromArgb(70, 70, 70);
-            _status.Text = "Ready";
-            page.Controls.Add(_status, 0, 3);
+            _status.Anchor = AnchorStyles.Left;
+
+            _statusTimestamp.Text = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+            _statusTimestamp.Font = new Font("Segoe UI", 8.8F, FontStyle.Regular);
+            _statusTimestamp.ForeColor = Color.FromArgb(148, 163, 184);
+            _statusTimestamp.AutoSize = true;
+            _statusTimestamp.Anchor = AnchorStyles.Right;
+
+            statusBar.Controls.Add(_statusDot, 0, 0);
+            statusBar.Controls.Add(_status, 1, 0);
+            statusBar.Controls.Add(_statusTimestamp, 2, 0);
+            page.Controls.Add(statusBar, 0, 2);
 
             Controls.Add(page);
-            AcceptButton = _mountButton;
+            AcceptButton = _testAndMountButton;
         }
 
         private void WireEvents()
@@ -199,6 +613,8 @@ namespace ThreeWa.SshDrive.App
             _saveButton.Click += (sender, args) => ExecuteUi(SaveCurrentProfile);
             _deleteButton.Click += (sender, args) => ExecuteUi(DeleteCurrentProfile);
             _browseButton.Click += (sender, args) => BrowseForPrivateKey();
+            _testAndMountButton.Click += async (sender, args) =>
+                await RunBusyAsync(TestAndMountAsync);
             _testButton.Click += async (sender, args) =>
                 await RunBusyAsync(TestAndTrustAsync);
             _mountButton.Click += async (sender, args) =>
@@ -208,7 +624,18 @@ namespace ThreeWa.SshDrive.App
             _unmountButton.Click += async (sender, args) =>
                 await RunBusyAsync(UnmountAsync);
             _explorerButton.Click += (sender, args) => ExecuteUi(OpenExplorer);
-            FormClosed += (sender, args) => DisposeMountedDrives();
+            _mascotPicture.Click += (sender, args) => CycleMascotQuote();
+            _speechBubble.Click += (sender, args) => CycleMascotQuote();
+            _mascotSpeech.Click += (sender, args) => CycleMascotQuote();
+            _mascotName.Click += (sender, args) => CycleMascotQuote();
+            FormClosing += OnFormClosing;
+            FormClosed += (sender, args) =>
+            {
+                _notifyIcon.Visible = false;
+                _notifyIcon.Dispose();
+                _mascotMedia?.Close();
+                DisposeMountedDrives();
+            };
             UpdateAuthenticationControls();
         }
 
@@ -260,9 +687,13 @@ namespace ThreeWa.SshDrive.App
 
             _selectedProfileName = profile.Name;
             WriteForm(profile);
-            SetStatus(IsMounted(profile.DriveLetter)
+            var mounted = IsMounted(profile.DriveLetter);
+            SetStatus(mounted
                 ? "Mounted at " + profile.DriveLetter
                 : "Profile loaded");
+            SetMascotSpeech(mounted
+                ? $"「{profile.Name}」已掛載於 {profile.DriveLetter}！隨時可用 Antigravity 進行開發～✨"
+                : $"已切換至「{profile.Name}」設定檔！點擊 Mount 即可掛載到 {profile.DriveLetter} 喔～");
         }
 
         private void NewProfile()
@@ -271,6 +702,7 @@ namespace ThreeWa.SshDrive.App
             _profiles.SelectedIndex = -1;
             WriteForm(new DriveProfile());
             SetStatus("New profile");
+            SetMascotSpeech("已建立新的設定檔草稿，填寫完成後點擊 Save 即可保存！");
             _name.Focus();
         }
 
@@ -283,6 +715,7 @@ namespace ThreeWa.SshDrive.App
 
             UpsertProfile(profile);
             SetStatus("Profile saved");
+            SetMascotSpeech($"設定檔「{profile.Name}」已成功保存！✨");
         }
 
         private void DeleteCurrentProfile()
@@ -300,6 +733,7 @@ namespace ThreeWa.SshDrive.App
             _profileStore.Save(_profileItems);
             RefreshProfileSelector(null);
             NewProfile();
+            SetMascotSpeech("設定檔已刪除完畢。");
         }
 
         private async Task TestAndTrustAsync()
@@ -307,12 +741,20 @@ namespace ThreeWa.SshDrive.App
             var profile = ReadForm();
             ValidateForProbe(profile);
             SetStatus("Connecting and reading the SSH host key…");
+            SetMascotSpeech("正在連線測試並讀取 SSH 主機金鑰中，請稍候片刻…🔍");
 
             var result = await Task.Run(() => _connectionProbe.Probe(profile));
             profile.HostKeyFingerprintSha256 = result.HostKeyFingerprintSha256;
             _hostFingerprint.Text = result.HostKeyFingerprintSha256;
             UpsertProfile(profile);
             SetStatus("Trusted " + result.HostKeyFingerprintSha256);
+            SetMascotSpeech("SSH 連線測試成功！主機指紋已安全記錄～✨");
+        }
+
+        private async Task TestAndMountAsync()
+        {
+            await TestAndTrustAsync();
+            await MountAsync();
         }
 
         private async Task MountAsync()
@@ -334,18 +776,22 @@ namespace ThreeWa.SshDrive.App
                 throw new InvalidOperationException(drive + " is already mounted by 3waSshDrive.");
 
             SetStatus("Mounting " + profile.Name + " at " + drive + "…");
+            SetMascotSpeech($"正在將遠端 Linux 掛載至 {drive} 槽…連線中 ⏳");
             var mounted = await Task.Run(() => _mountManager.Mount(profile));
             _mountedDrives.Add(drive, mounted);
             UpsertProfile(profile);
             SetStatus("Mounted " + profile.Name + " at " + drive);
+            SetMascotSpeech($"已成功掛載到 {drive} 槽！Antigravity 開發全速啟動～(๑•̀ㅂ•́)و✧");
         }
 
         private async Task InstallDriverAsync()
         {
             SetStatus("正在透過 winget 安裝 WinFsp 驅動，請於跳出的管理員提權視窗點選「是」…");
+            SetMascotSpeech("正在安裝 WinFsp 驅動中，請於系統提權視窗點選「是」喔～📦");
             await Task.Run(() => WinFspInstaller.InstallAsync());
             RefreshDriverStatus();
             SetStatus("WinFsp 驅動安裝完成且驗證通過，已可正常掛載。");
+            SetMascotSpeech("WinFsp 驅動已安裝妥當！現在可以掛載磁碟機了～✨");
         }
 
         private bool RefreshDriverStatus()
@@ -371,9 +817,11 @@ namespace ThreeWa.SshDrive.App
                 throw new InvalidOperationException(drive + " is not mounted by 3waSshDrive.");
 
             SetStatus("Unmounting " + drive + "…");
+            SetMascotSpeech($"正在卸載磁碟機 {drive}…⏳");
             await Task.Run(() => mounted.Dispose());
             _mountedDrives.Remove(drive);
             SetStatus("Unmounted " + drive);
+            SetMascotSpeech($"磁碟機 {drive} 已卸載，辛苦啦～隨時點我重新掛載喔！☕");
         }
 
         private void OpenExplorer()
@@ -488,6 +936,7 @@ namespace ThreeWa.SshDrive.App
             catch (Exception exception)
             {
                 ShowError(exception);
+                SetMascotSpeech("嗚哇！操作好像遇到問題了，請檢查設定或網路喔＞＜");
             }
             finally
             {
@@ -504,6 +953,7 @@ namespace ThreeWa.SshDrive.App
             catch (Exception exception)
             {
                 ShowError(exception);
+                SetMascotSpeech("執行操作時發生錯誤，請檢查輸入內容喔～＞＜");
             }
         }
 
@@ -520,6 +970,7 @@ namespace ThreeWa.SshDrive.App
             _readOnly.Enabled = !busy;
 
             var runtime = WinFspRuntimePreflight.CheckX64();
+            _testAndMountButton.Enabled = !busy && runtime.IsValid;
             _mountButton.Enabled = !busy && runtime.IsValid;
             _installDriverButton.Visible = !runtime.IsValid;
 
@@ -528,7 +979,7 @@ namespace ThreeWa.SshDrive.App
 
         private void ShowError(Exception exception)
         {
-            SetStatus("Error: " + exception.Message);
+            SetStatus("Error: " + exception.Message, false);
             MessageBox.Show(
                 this,
                 exception.Message,
@@ -537,9 +988,27 @@ namespace ThreeWa.SshDrive.App
                 MessageBoxIcon.Error);
         }
 
-        private void SetStatus(string message)
+        private void SetStatus(string message, bool? isSuccess = null)
         {
             _status.Text = message;
+            _statusTimestamp.Text = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+
+            if (isSuccess.HasValue)
+            {
+                _statusDot.ForeColor = isSuccess.Value
+                    ? Color.FromArgb(34, 197, 94)  // Vibrant green
+                    : Color.FromArgb(239, 68, 68);  // Vibrant red
+            }
+            else
+            {
+                var lower = message.ToLowerInvariant();
+                if (lower.Contains("error") || lower.Contains("失敗"))
+                    _statusDot.ForeColor = Color.FromArgb(239, 68, 68);
+                else if (lower.Contains("mounted") || lower.Contains("trusted") || lower.Contains("ready") || lower.Contains("loaded") || lower.Contains("saved"))
+                    _statusDot.ForeColor = Color.FromArgb(34, 197, 94);
+                else
+                    _statusDot.ForeColor = Color.FromArgb(59, 130, 246);
+            }
         }
 
         private string SelectedDriveLetter()
@@ -586,6 +1055,58 @@ namespace ThreeWa.SshDrive.App
             _mountedDrives.Clear();
         }
 
+        private void SetupTrayIcon()
+        {
+            _notifyIcon.Text = "3waSshDrive";
+            _notifyIcon.Icon = Icon ?? SystemIcons.Application;
+            _notifyIcon.Visible = true;
+
+            var menu = new ContextMenuStrip();
+            var showItem = new ToolStripMenuItem("展開視窗");
+            showItem.Click += (sender, args) => RestoreFromTray();
+
+            var quitItem = new ToolStripMenuItem("離開 (QUIT)");
+            quitItem.Click += (sender, args) => ExitApplication();
+
+            menu.Items.Add(showItem);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(quitItem);
+
+            _notifyIcon.ContextMenuStrip = menu;
+            _notifyIcon.DoubleClick += (sender, args) => RestoreFromTray();
+            _notifyIcon.BalloonTipClicked += (sender, args) => RestoreFromTray();
+        }
+
+        private void OnFormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (!_isExplicitExit && e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                _mascotMedia?.Pause();
+                Hide();
+                _notifyIcon.ShowBalloonTip(
+                    1500,
+                    "3waSshDrive",
+                    "已縮小至系統匣常駐，掛載中的磁碟將保持連線。",
+                    ToolTipIcon.Info);
+            }
+        }
+
+        private void RestoreFromTray()
+        {
+            Show();
+            WindowState = FormWindowState.Normal;
+            BringToFront();
+            Activate();
+            _mascotMedia?.Play();
+        }
+
+        private void ExitApplication()
+        {
+            _isExplicitExit = true;
+            Close();
+        }
+
         private static void ConfigureComboBox(ComboBox comboBox)
         {
             comboBox.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -595,28 +1116,208 @@ namespace ThreeWa.SshDrive.App
         private static void AddRow(
             TableLayoutPanel table,
             int row,
+            string iconText,
             string labelText,
             Control field,
             Control action)
         {
+            var iconLabel = new Label
+            {
+                AutoSize = true,
+                Text = iconText,
+                ForeColor = Color.FromArgb(59, 130, 246),
+                Font = new Font("Segoe UI", 10F, FontStyle.Regular),
+                Anchor = AnchorStyles.Right,
+                Margin = new Padding(0, 4, 4, 4)
+            };
+
             var label = new Label
             {
                 AutoSize = true,
                 Text = labelText,
+                ForeColor = Color.FromArgb(30, 41, 59),
+                Font = new Font("Segoe UI", 9.2F, FontStyle.Regular),
                 Anchor = AnchorStyles.Left,
-                Margin = new Padding(0, 7, 10, 7)
+                Margin = new Padding(0, 4, 8, 4)
             };
-            field.Dock = DockStyle.Fill;
-            field.Margin = new Padding(0, 4, 10, 4);
 
-            table.Controls.Add(label, 0, row);
-            table.Controls.Add(field, 1, row);
+            field.Dock = DockStyle.Fill;
+            field.Margin = new Padding(0, 2, 8, 2);
+
+            table.Controls.Add(iconLabel, 0, row);
+            table.Controls.Add(label, 1, row);
+            table.Controls.Add(field, 2, row);
             if (action != null)
             {
                 action.AutoSize = true;
-                action.Margin = new Padding(0, 3, 0, 3);
-                table.Controls.Add(action, 2, row);
+                action.Margin = new Padding(0, 1, 0, 1);
+                table.Controls.Add(action, 3, row);
             }
+        }
+
+        private void SetMascotSpeech(string text)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => SetMascotSpeech(text)));
+                return;
+            }
+            _mascotSpeech.Text = text;
+        }
+
+        private void CycleMascotQuote()
+        {
+            _mascotQuoteIndex = (_mascotQuoteIndex + 1) % MascotQuotes.Length;
+            SetMascotSpeech(MascotQuotes[_mascotQuoteIndex]);
+        }
+
+        private void ShowAboutDialog()
+        {
+            var aboutText =
+                $"3waSshDrive - {AppVersion}\n" +
+                $"──────────────────────────────\n\n" +
+                $"• 作者 (Author)：羽山 (秋人) / shadowjohn\n" +
+                $"• 團隊：3WA 問題解決專家工作室\n" +
+                $"• 信箱：linainverseshadow@gmail.com\n" +
+                $"• 原始碼：https://github.com/shadowjohn/3waSshDrive\n\n" +
+                $"• 專案說明：\n" +
+                $"  透過 WinFsp 與 SFTP 將遠端 Linux 工作空間掛載為 Windows 磁碟機。\n" +
+                $"  支援高速讀寫、Metadata 快取、主機指紋校驗與背景常駐。\n\n" +
+                $"• 看板娘：三哇娘 (3WA-chan)\n" +
+                $"  Linux × Windows = More Freedom. 💙";
+
+            MessageBox.Show(
+                this,
+                aboutText,
+                $"關於 3waSshDrive - {AppVersion}",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+
+        private static string FindMascotVideoPath()
+        {
+            var candidates = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "mascot.mp4"),
+                System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(MainForm).Assembly.Location) ?? "", "Assets", "mascot.mp4"),
+                @"D:\mytools\3waSshDrive\src\3waSshDrive.App\Assets\mascot.mp4"
+            };
+            return candidates.FirstOrDefault(p => !string.IsNullOrEmpty(p) && System.IO.File.Exists(p));
+        }
+
+        private static Image LoadMascotImage()
+        {
+            try
+            {
+                var assembly = typeof(MainForm).Assembly;
+                using (var stream = assembly.GetManifestResourceStream("ThreeWa.SshDrive.App.Assets.mascot_card.png"))
+                {
+                    if (stream != null)
+                        return Image.FromStream(stream);
+                }
+            }
+            catch
+            {
+            }
+
+            var cardLocalPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "mascot_card.png");
+            if (System.IO.File.Exists(cardLocalPath))
+            {
+                try
+                {
+                    return Image.FromFile(cardLocalPath);
+                }
+                catch
+                {
+                }
+            }
+
+            try
+            {
+                var assembly = typeof(MainForm).Assembly;
+                using (var stream = assembly.GetManifestResourceStream("ThreeWa.SshDrive.App.Assets.mascot.jpg"))
+                {
+                    if (stream != null)
+                        return Image.FromStream(stream);
+                }
+            }
+            catch
+            {
+            }
+
+            var localPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "mascot.jpg");
+            if (System.IO.File.Exists(localPath))
+            {
+                try
+                {
+                    return Image.FromFile(localPath);
+                }
+                catch
+                {
+                }
+            }
+
+            return null;
+        }
+
+        private static Image LoadHeaderLogo()
+        {
+            try
+            {
+                var assembly = typeof(MainForm).Assembly;
+                using (var stream = assembly.GetManifestResourceStream("ThreeWa.SshDrive.App.Assets.header_logo.png"))
+                {
+                    if (stream != null)
+                        return Image.FromStream(stream);
+                }
+            }
+            catch
+            {
+            }
+
+            var localPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "header_logo.png");
+            if (System.IO.File.Exists(localPath))
+            {
+                try
+                {
+                    return Image.FromFile(localPath);
+                }
+                catch
+                {
+                }
+            }
+
+            return null;
+        }
+
+        private static Icon LoadAppIcon()
+        {
+            try
+            {
+                var assembly = typeof(MainForm).Assembly;
+                using (var stream = assembly.GetManifestResourceStream("ThreeWa.SshDrive.App.Assets.app.ico"))
+                {
+                    if (stream != null)
+                        return new Icon(stream);
+                }
+            }
+            catch
+            {
+            }
+
+            var localPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "app.ico");
+            if (System.IO.File.Exists(localPath))
+            {
+                try
+                {
+                    return new Icon(localPath);
+                }
+                catch
+                {
+                }
+            }
+
+            return null;
         }
     }
 }

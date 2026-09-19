@@ -8,6 +8,8 @@ namespace ThreeWa.SshDrive.Core.Remote
     {
         bool IsConnected { get; }
 
+        object SyncRoot { get; }
+
         void Connect();
 
         RemoteEntry GetEntry(string path);

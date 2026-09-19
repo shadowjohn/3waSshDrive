@@ -16,6 +16,7 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
 
         public bool IsConnected { get; private set; }
         public bool IsDisposed { get; private set; }
+        public object SyncRoot { get; } = new object();
 
         public void AddEntry(RemoteEntry entry, byte[] content = null)
         {

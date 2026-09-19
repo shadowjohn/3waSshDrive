@@ -17,7 +17,7 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
 
         public int Mount(string mountPoint)
         {
-            return _host.Mount(mountPoint, null, true, 0);
+            return _host.Mount(mountPoint, null, false, 0);
         }
 
         public void Unmount()

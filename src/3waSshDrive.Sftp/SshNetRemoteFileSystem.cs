@@ -37,6 +37,8 @@ namespace ThreeWa.SshDrive.Sftp
             }
         }
 
+        public object SyncRoot { get; } = new object();
+
         public void Connect()
         {
             lock (_lifecycleLock)
@@ -59,6 +61,7 @@ namespace ThreeWa.SshDrive.Sftp
 
                     _client = new SftpClient(connectionInfo)
                     {
+                        BufferSize = 64 * 1024,
                         KeepAliveInterval = TimeSpan.FromSeconds(30),
                         OperationTimeout = TimeSpan.FromSeconds(30)
                     };
@@ -176,19 +179,22 @@ namespace ThreeWa.SshDrive.Sftp
 
         private T Execute<T>(string path, Func<T> operation)
         {
-            if (!IsConnected)
+            lock (SyncRoot)
             {
-                throw new RemoteConnectionException(
-                    "The SSH/SFTP connection is not active.");
-            }
+                if (!IsConnected)
+                {
+                    throw new RemoteConnectionException(
+                        "The SSH/SFTP connection is not active.");
+                }
 
-            try
-            {
-                return operation();
-            }
-            catch (Exception exception)
-            {
-                throw SshNetExceptionMapper.Translate(exception, path);
+                try
+                {
+                    return operation();
+                }
+                catch (Exception exception)
+                {
+                    throw SshNetExceptionMapper.Translate(exception, path);
+                }
             }
         }
 

@@ -15,7 +15,7 @@ namespace ThreeWa.SshDrive.FileSystem
 
         public RemoteEntry Entry { get; set; }
 
-        public Stream Stream { get; }
+        public Stream Stream { get; set; }
 
         public object SyncRoot { get; } = new object();
 

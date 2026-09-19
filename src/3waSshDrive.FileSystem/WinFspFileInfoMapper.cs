@@ -13,8 +13,7 @@ namespace ThreeWa.SshDrive.FileSystem
             if (entry.IsDirectory)
                 return (uint)System.IO.FileAttributes.Directory;
 
-            var attributes = System.IO.FileAttributes.Archive |
-                             System.IO.FileAttributes.ReadOnly;
+            var attributes = System.IO.FileAttributes.Archive;
             if (entry.Name.StartsWith(".", StringComparison.Ordinal))
                 attributes |= System.IO.FileAttributes.Hidden;
 
