@@ -16,6 +16,9 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
 
         public bool IsConnected { get; private set; }
         public bool IsDisposed { get; private set; }
+        public int ActiveStreamCount { get; private set; }
+        public int StreamDisposeAttemptCount { get; private set; }
+        public int ListDirectoryCallCount { get; private set; }
         public object SyncRoot { get; } = new object();
 
         public void AddEntry(RemoteEntry entry, byte[] content = null)
@@ -44,6 +47,7 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
 
         public IReadOnlyList<RemoteEntry> ListDirectory(string path)
         {
+            ListDirectoryCallCount++;
             if (!_directories.TryGetValue(path, out var entries))
             {
                 if (_entries.ContainsKey(path) && _entries[path].IsDirectory)
@@ -166,6 +170,21 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             }
         }
 
+        internal void StreamOpened()
+        {
+            ActiveStreamCount++;
+        }
+
+        internal void StreamClosed()
+        {
+            ActiveStreamCount--;
+        }
+
+        internal void StreamDisposeAttempted()
+        {
+            StreamDisposeAttemptCount++;
+        }
+
         private static string GetName(string path)
         {
             var normalized = (path ?? string.Empty).TrimEnd('/');
@@ -182,6 +201,7 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             {
                 _owner = owner;
                 _path = path;
+                _owner.StreamOpened();
                 if (initial != null && initial.Length > 0)
                 {
                     Write(initial, 0, initial.Length);
@@ -198,7 +218,12 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             protected override void Dispose(bool disposing)
             {
                 if (disposing)
+                    _owner.StreamDisposeAttempted();
+                if (disposing && CanWrite)
+                {
                     Sync();
+                    _owner.StreamClosed();
+                }
                 base.Dispose(disposing);
             }
 

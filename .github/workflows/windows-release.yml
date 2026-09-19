@@ -37,6 +37,7 @@ jobs:
           .\scripts\tests\Test-NewReleaseStaging.ps1
           .\scripts\tests\Test-NewPortablePackage.ps1
           .\scripts\tests\Test-NewVelopackRelease.ps1
+          .\scripts\tests\Test-Test3waSshDrive.ps1
 
       - name: Resolve release version
         shell: pwsh

@@ -137,6 +137,30 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
         }
 
         [TestMethod]
+        public void ReadDirectoryEntry_ReusesCachedListingAcrossDirectoryHandles()
+        {
+            var remote = new FakeRemoteFileSystem();
+            var root = Directory("", "/home/dev");
+            remote.AddEntry(root);
+            remote.SetDirectory("/home/dev", File("entry.txt", "/home/dev/entry.txt", 1));
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
+
+            for (var iteration = 0; iteration < 2; iteration++)
+            {
+                fileSystem.Open(
+                    @"\", FileSystemBase.FILE_DIRECTORY_FILE, 0,
+                    out var node, out var desc, out _, out _);
+                object context = null;
+                while (fileSystem.ReadDirectoryEntry(node, desc, null, null, ref context, out _, out _))
+                {
+                }
+                fileSystem.Close(node, desc);
+            }
+
+            Assert.AreEqual(1, remote.ListDirectoryCallCount);
+        }
+
+        [TestMethod]
         public void Write_AlwaysRejectsReadOnlyVolume()
         {
             var fileSystem = new SftpReadOnlyFileSystem(
@@ -283,6 +307,35 @@ namespace ThreeWa.SshDrive.FileSystem.Tests
             fileSystem.Cleanup(node, desc, @"\del.txt", FileSystemBase.CleanupDelete);
 
             Assert.IsFalse(remote.Exists("/home/dev/del.txt"));
+        }
+
+        [TestMethod]
+        public void Cleanup_WithoutDeleteFlag_ReleasesSftpHandle()
+        {
+            var remote = new FakeRemoteFileSystem();
+            var fileSystem = new SftpReadOnlyFileSystem(remote, "/home/dev");
+
+            var status = fileSystem.Create(
+                @"\release-handle.txt",
+                0,
+                0x40000000,
+                0,
+                null,
+                0,
+                out var fileNode,
+                out var fileDesc,
+                out _,
+                out _);
+
+            Assert.AreEqual(FileSystemBase.STATUS_SUCCESS, status);
+            Assert.AreEqual(1, remote.ActiveStreamCount);
+
+            fileSystem.Cleanup(fileNode, fileDesc, @"\release-handle.txt", 0);
+
+            Assert.AreEqual(0, remote.ActiveStreamCount);
+            fileSystem.Close(fileNode, fileDesc);
+            Assert.AreEqual(0, remote.ActiveStreamCount);
+            Assert.AreEqual(1, remote.StreamDisposeAttemptCount);
         }
 
         [TestMethod]

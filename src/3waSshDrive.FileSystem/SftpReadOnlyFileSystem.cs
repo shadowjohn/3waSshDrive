@@ -30,6 +30,10 @@ namespace ThreeWa.SshDrive.FileSystem
 
         // ponytail: short-lived in-memory metadata cache (2s TTL) absorbs bursts of Explorer / IDE queries without SFTP round-trips.
         private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(2);
+        // A directory enumeration can contain thousands of SFTP entries. Keep the
+        // complete result a little longer so each Windows directory handle does
+        // not re-fetch the same listing during an Explorer/IDE metadata burst.
+        private static readonly TimeSpan DirectoryEntriesCacheTtl = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan NegativeCacheTtl = TimeSpan.FromSeconds(1);
         private static readonly TimeSpan VolumeInfoCacheTtl = TimeSpan.FromSeconds(30);
 
@@ -38,6 +42,9 @@ namespace ThreeWa.SshDrive.FileSystem
 
         private readonly ConcurrentDictionary<string, CacheItem<HashSet<string>>> _dirChildrenCache =
             new ConcurrentDictionary<string, CacheItem<HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
+
+        private readonly ConcurrentDictionary<string, CacheItem<IReadOnlyList<RemoteEntry>>> _directoryEntriesCache =
+            new ConcurrentDictionary<string, CacheItem<IReadOnlyList<RemoteEntry>>>(StringComparer.OrdinalIgnoreCase);
 
         private CacheItem<RemoteVolumeInfo> _volumeInfoCache;
         private readonly object _volumeInfoLock = new object();
@@ -100,8 +107,10 @@ namespace ThreeWa.SshDrive.FileSystem
                 return;
 
             _entryCache.TryRemove(mappedPath, out _);
+            _directoryEntriesCache.TryRemove(mappedPath, out _);
             var parent = GetParentPath(mappedPath);
             _dirChildrenCache.TryRemove(parent, out _);
+            _directoryEntriesCache.TryRemove(parent, out _);
             _entryCache.TryRemove(parent, out _);
         }
 
@@ -113,6 +122,7 @@ namespace ThreeWa.SshDrive.FileSystem
             _entryCache[entry.FullPath] = new CacheItem<RemoteEntry>(entry, CacheTtl);
             var parent = GetParentPath(entry.FullPath);
             _dirChildrenCache.TryRemove(parent, out _);
+            _directoryEntriesCache.TryRemove(parent, out _);
         }
 
         private static string GetParentPath(string path)
@@ -383,25 +393,34 @@ namespace ThreeWa.SshDrive.FileSystem
             if (handle == null)
                 return;
 
-            if (!ReadOnly && ((flags & CleanupDelete) != 0 || handle.DeleteOnClose))
+            var deleteOnCleanup =
+                !ReadOnly && ((flags & CleanupDelete) != 0 || handle.DeleteOnClose);
+            var mappedPath = deleteOnCleanup ? MapPath(fileName) : null;
+
+            try
             {
-                var mappedPath = MapPath(fileName);
-                try
+                lock (_remote.SyncRoot)
                 {
-                    lock (_remote.SyncRoot)
+                    // WinFsp invokes Cleanup when a handle stops accepting I/O.
+                    // Releasing the SFTP stream here prevents thousands of closed
+                    // Windows handles from consuming server-side SFTP handles
+                    // until the later Close callback is dispatched.
+                    handle.Dispose();
+                    if (deleteOnCleanup)
                     {
-                        handle.Dispose();
                         if (handle.Entry.IsDirectory)
                             _remote.DeleteDirectory(mappedPath);
                         else
                             _remote.DeleteFile(mappedPath);
                     }
+                }
+
+                if (deleteOnCleanup)
                     InvalidateCache(mappedPath);
-                }
-                catch
-                {
-                    // WinFsp ignores exceptions during cleanup
-                }
+            }
+            catch
+            {
+                // WinFsp ignores exceptions during cleanup.
             }
         }
 
@@ -720,6 +739,9 @@ namespace ThreeWa.SshDrive.FileSystem
 
         private IReadOnlyList<RemoteEntry> LoadDirectoryEntries(RemoteEntry directory)
         {
+            if (_directoryEntriesCache.TryGetValue(directory.FullPath, out var cached) && !cached.IsExpired)
+                return cached.Value;
+
             var rawEntries = _remote.ListDirectory(directory.FullPath);
 
             var childNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -763,7 +785,11 @@ namespace ThreeWa.SshDrive.FileSystem
                     directory.LastWriteTimeUtc));
             }
 
-            return entries;
+            var cachedEntries = entries.AsReadOnly();
+            _directoryEntriesCache[directory.FullPath] = new CacheItem<IReadOnlyList<RemoteEntry>>(
+                cachedEntries,
+                DirectoryEntriesCacheTtl);
+            return cachedEntries;
         }
 
         private static int FindEntryAfterMarker(

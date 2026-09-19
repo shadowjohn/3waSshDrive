@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Renci.SshNet;
 using Renci.SshNet.Common;
 using Renci.SshNet.Sftp;
@@ -13,6 +14,8 @@ namespace ThreeWa.SshDrive.Sftp
 {
     public sealed class SshNetRemoteFileSystem : IRemoteFileSystem
     {
+        private const string TracePathEnvironmentVariable = "3WASSHDRIVE_SFTP_TRACE_PATH";
+        private static readonly object TraceLock = new object();
         private readonly object _lifecycleLock = new object();
         private readonly DriveProfile _profile;
         private readonly HostKeyPolicy _hostKeyPolicy;
@@ -82,11 +85,22 @@ namespace ThreeWa.SshDrive.Sftp
 
         public RemoteEntry GetEntry(string path)
         {
-            return Execute(path, () =>
+            WriteTrace("GetEntry.begin", path);
+            try
             {
-                var attributes = _client.GetAttributes(path);
-                return MapEntry(GetName(path), path, attributes);
-            });
+                var entry = Execute(path, () =>
+                {
+                    var attributes = _client.GetAttributes(path);
+                    return MapEntry(GetName(path), path, attributes);
+                });
+                WriteTrace("GetEntry.done", path);
+                return entry;
+            }
+            catch (Exception exception)
+            {
+                WriteTrace("GetEntry.failed." + exception.GetType().Name, path);
+                throw;
+            }
         }
 
         public IReadOnlyList<RemoteEntry> ListDirectory(string path)
@@ -327,6 +341,35 @@ namespace ThreeWa.SshDrive.Sftp
             return separator < 0
                 ? normalized
                 : normalized.Substring(separator + 1);
+        }
+
+        private static void WriteTrace(string operation, string path)
+        {
+            var tracePath = Environment.GetEnvironmentVariable(TracePathEnvironmentVariable);
+            if (string.IsNullOrWhiteSpace(tracePath))
+                return;
+
+            try
+            {
+                var line = string.Format(
+                    "{0:o} [T{1}] {2} {3}{4}",
+                    DateTime.UtcNow,
+                    System.Threading.Thread.CurrentThread.ManagedThreadId,
+                    operation,
+                    path ?? string.Empty,
+                    Environment.NewLine);
+                lock (TraceLock)
+                {
+                    File.AppendAllText(
+                        tracePath,
+                        line,
+                        new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                }
+            }
+            catch
+            {
+                // Diagnostics must never alter normal SFTP behavior.
+            }
         }
 
         private void CleanupClient()

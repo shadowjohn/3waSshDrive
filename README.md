@@ -163,6 +163,22 @@ WinFsp 不會包進 Setup；它是另外下載並驗證的必要元件，程式�
 
 ---
 
+## 🧪 Benchmark / Torture Test
+
+scripts\Test-3waSshDrive.ps1 直接透過 Windows 檔案 API 對已掛載的 3waSshDrive 磁碟做實測：碎檔建立與讀取、100 MiB／1 GiB 循序寫入及讀回、目錄 stat、檔案 rename/delete、IDE/Git 型混合操作，以及本機→掛載碟→本機的 SHA-256 完整性驗證。
+
+預設是 dry run，不會建立或修改任何檔案：
+
+    pwsh -NoProfile -File .\scripts\Test-3waSshDrive.ps1 -TargetRoot T:\
+
+確認掛載設定檔可寫，並選擇可安全清理的目標後，才加上 -Apply：
+
+    pwsh -NoProfile -File .\scripts\Test-3waSshDrive.ps1 -TargetRoot T:\ -Apply -ReportPath C:\Temp\3waSshDrive-benchmark.json
+
+預設規模為 5,000 個 1–32 KiB 檔案、100 MiB 與 1 GiB 循序檔、1,000 個目錄、1,000 次檔案 rename、2,000 次混合操作與 64 MiB SHA-256 驗證；可用 -SmallFileCount 10000 等參數放大。每次只會在 TargetRoot 下建立帶有 RunId 與 marker 的專用測試樹，成功時預設自動移除；失敗或指定 -KeepArtifacts 時會保留現場供追查。
+
+---
+
 ## 📁 設定檔與紀錄檔位置 (Storage & Logs)
 
 - **連線設定檔 (Profiles)**：

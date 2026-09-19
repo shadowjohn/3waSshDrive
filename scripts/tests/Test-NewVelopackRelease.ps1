@@ -265,6 +265,7 @@ try {
         '.\scripts\tests\Test-NewReleaseStaging.ps1'
         '.\scripts\tests\Test-NewPortablePackage.ps1'
         '.\scripts\tests\Test-NewVelopackRelease.ps1'
+        '.\scripts\tests\Test-Test3waSshDrive.ps1'
         '-Tag $env:GITHUB_REF_NAME -GitHubEnv $env:GITHUB_ENV'
         'call build.bat --no-pause'
         'call run.bat --check'
