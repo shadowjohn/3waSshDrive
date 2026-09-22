@@ -24,7 +24,7 @@
 
 <div align="center">
 
-![3waSshDrive Interface](snapshot/s1.png)
+![3waSshDrive Interface](snapshot/s2.png)
 
 </div>
 
@@ -48,6 +48,11 @@
 
 - 💽 **智慧槽位偵測 (Smart Drive Letter Detection)**
   - 自動偵測系統實體硬碟、虛擬光碟與現有網路磁碟，於下拉選單清楚標示 `(已掛載)`，防止槽位碰撞與覆蓋。
+
+- 📋 **多工作區 Profile Fleet (Multi-Profile Mounting)**
+  - 以總覽表格維護多組 Host、遠端根目錄與磁碟代號，顯示各組即時掛載狀態。
+  - 支援逐組或批次掛載／卸載；設定檔名稱與磁碟代號會在儲存時預先防撞。
+  - Private key Profile 可選擇啟動後自動掛載；Password 仍僅存在記憶體，絕不寫入設定檔。
 
 - 📋 **未預期異常崩潰日誌 (Crash Logger)**
   - 全方位攔截 UI 執行緒、AppDomain 與 TaskScheduler 異常。
@@ -150,16 +155,18 @@ WinFsp 不會包進 Setup；它是另外下載並驗證的必要元件，程式�
    - 設定遠端根目錄（如 `/home/john` 或 `/var/www/html`）。
    - 選擇登入方式（私鑰路徑或輸入密碼）。
    - 選擇欲掛載的 Windows 磁碟代號（如 `Z:`）。
+   - 可建立多組 Profile；每組必須使用不同磁碟代號。Private key Profile 可勾選「自動掛載」。
 2. **測試並信任 (Test & Trust)**：
    - 點擊「**▶ Test Mount (測試連線並掛載)**」或「**Test & Trust**」。
    - 系統會連線並自動擷取遠端伺服器的 SHA-256 主機指紋進行防偽綁定。
 3. **掛載磁碟機 (Mount)**：
-   - 點擊「**🖹 Mount (掛載)**」，成功後狀態燈轉為綠色 `●`。
+   - 點擊「**🖹 Mount (掛載)**」掛載目前 Profile，或在 Profile fleet 使用「**▶ Mount all**」依序掛載全部有效設定。
+   - 成功後狀態燈轉為綠色 `●`；表格會顯示每一組的掛載狀態。
 4. **開啟工作空間 (Open Explorer)**：
    - 點擊「**📁 Open (開啟資料夾)**」，Windows 檔案總管立即展開該磁碟機。
    - 您可以直接在 VS Code、Antigravity 或任何編輯器中將該磁碟槽當作本機磁碟開啟與存檔！
 5. **卸載 (Unmount)**：
-   - 點擊「**⏏ Unmount (卸載)**」即可安全釋放磁碟槽。
+   - 點擊「**⏏ Unmount (卸載)**」即可安全釋放目前磁碟槽；「**⏏ Unmount all**」可逐一釋放所有由程式掛載的槽位。
 
 ---
 

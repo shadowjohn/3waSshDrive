@@ -36,6 +36,9 @@ namespace ThreeWa.SshDrive.Core.Models
         [DataMember(Order = 10)]
         public bool ReadOnly { get; set; } = false;
 
+        [DataMember(Order = 11)]
+        public bool AutoMountOnStartup { get; set; } = false;
+
         // 密碼只供目前應用程式執行期間使用，絕不寫入 profiles.json。
         [IgnoreDataMember]
         public string Password { get; set; }

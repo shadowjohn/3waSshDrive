@@ -28,6 +28,7 @@ namespace ThreeWa.SshDrive.App
             new Dictionary<string, MountedDrive>(StringComparer.OrdinalIgnoreCase);
 
         private readonly ComboBox _profiles = new ComboBox();
+        private readonly DataGridView _profileGrid = new DataGridView();
         private readonly TextBox _name = new TextBox();
         private readonly TextBox _host = new TextBox();
         private readonly NumericUpDown _port = new NumericUpDown();
@@ -41,10 +42,13 @@ namespace ThreeWa.SshDrive.App
         private readonly Label _authCredTextLabel = new Label();
         private readonly TextBox _hostFingerprint = new TextBox();
         private readonly CheckBox _readOnly = new CheckBox();
+        private readonly CheckBox _autoMountOnStartup = new CheckBox();
         private readonly Label _status = new Label();
         private readonly Button _newButton = new Button();
         private readonly Button _saveButton = new Button();
         private readonly Button _deleteButton = new Button();
+        private readonly Button _mountAllButton = new Button();
+        private readonly Button _unmountAllButton = new Button();
         private readonly Button _browseButton = new Button();
         private readonly Button _testAndMountButton = new Button();
         private readonly Button _testButton = new Button();
@@ -83,6 +87,7 @@ namespace ThreeWa.SshDrive.App
 
         private List<DriveProfile> _profileItems = new List<DriveProfile>();
         private string _selectedProfileName;
+        private bool _isSynchronizingProfileGrid;
         private bool _busy;
 
         public MainForm()
@@ -290,9 +295,10 @@ namespace ThreeWa.SshDrive.App
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 3
+                RowCount = 4
             };
             leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
             leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
 
@@ -333,6 +339,8 @@ namespace ThreeWa.SshDrive.App
             sectionHeader.Controls.Add(sectionDesc);
             leftLayout.Controls.Add(sectionHeader, 0, 0);
 
+            leftLayout.Controls.Add(BuildProfileFleet(), 0, 1);
+
             // Form Fields Table
             var fields = new TableLayoutPanel
             {
@@ -366,9 +374,23 @@ namespace ThreeWa.SshDrive.App
             _remoteRoot.Text = "/";
             _password.UseSystemPasswordChar = true;
             _hostFingerprint.ReadOnly = true;
-            _readOnly.Text = "Read-only (唯讀模式)";
+            _readOnly.Text = "唯讀";
             _readOnly.AutoSize = true;
             _readOnly.Anchor = AnchorStyles.Left;
+            _autoMountOnStartup.Text = "自動掛載";
+            _autoMountOnStartup.AutoSize = true;
+            _autoMountOnStartup.Anchor = AnchorStyles.Left;
+
+            var options = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Margin = new Padding(0)
+            };
+            options.Controls.Add(_readOnly);
+            options.Controls.Add(_autoMountOnStartup);
 
             // Profile Button Group: + New, Save, Delete
             _newButton.Text = "+ New";
@@ -427,8 +449,8 @@ namespace ThreeWa.SshDrive.App
             AddRow(fields, 6, "💽", "Drive letter", _driveLetter, null);
             AddRow(fields, 7, "🛡", "Authentication", _authenticationMode, null);
             AddCredentialRow(fields, 8);
-            AddRow(fields, 9, "⚙", "Options", _readOnly, null);
-            leftLayout.Controls.Add(fields, 0, 1);
+            AddRow(fields, 9, "⚙", "Options", options, null);
+            leftLayout.Controls.Add(fields, 0, 2);
 
             // Action Buttons Bar
             var actions = new TableLayoutPanel
@@ -500,7 +522,7 @@ namespace ThreeWa.SshDrive.App
             actions.Controls.Add(_mountButton, 1, 0);
             actions.Controls.Add(_unmountButton, 2, 0);
             actions.Controls.Add(_explorerButton, 3, 0);
-            leftLayout.Controls.Add(actions, 0, 2);
+            leftLayout.Controls.Add(actions, 0, 3);
 
             leftCard.Controls.Add(leftLayout);
             mainLayout.Controls.Add(leftCard, 0, 0);
@@ -621,6 +643,10 @@ namespace ThreeWa.SshDrive.App
             if (mascotDisplay != _mascotPicture)
                 tip.SetToolTip(mascotDisplay, "點我互動！(Click me)");
             tip.SetToolTip(_speechBubble, "點我互動！(Click me)");
+            tip.SetToolTip(_readOnly, "Read-only (唯讀模式)");
+            tip.SetToolTip(
+                _autoMountOnStartup,
+                "Auto-mount on startup (啟動後自動掛載)");
 
             mascotColumn.Controls.Add(_speechBubble, 0, 0);
             mascotColumn.Controls.Add(mascotDisplay, 0, 1);
@@ -671,9 +697,164 @@ namespace ThreeWa.SshDrive.App
             AcceptButton = _testAndMountButton;
         }
 
+        private Control BuildProfileFleet()
+        {
+            var fleet = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                Margin = new Padding(0, 0, 0, 4),
+                BackColor = Color.FromArgb(248, 250, 252)
+            };
+            fleet.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            fleet.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            fleet.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            ApplyRoundedRegion(fleet, 8, Color.FromArgb(226, 232, 240));
+
+            var header = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Padding = new Padding(8, 4, 8, 0),
+                Margin = new Padding(0)
+            };
+            header.Controls.Add(new Label
+            {
+                AutoSize = true,
+                Text = "▦ Profile fleet",
+                Font = new Font("Segoe UI", 9.2F, FontStyle.Bold),
+                ForeColor = Color.FromArgb(30, 41, 59),
+                Margin = new Padding(0, 0, 8, 0)
+            });
+            header.Controls.Add(new Label
+            {
+                AutoSize = true,
+                Text = "選取一列即可編輯；各 Profile 可同時掛載",
+                Font = new Font("Segoe UI", 8.3F, FontStyle.Regular),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Margin = new Padding(0, 2, 0, 0)
+            });
+
+            ConfigureProfileGrid();
+
+            var bulkActions = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Padding = new Padding(8, 1, 8, 3),
+                Margin = new Padding(0)
+            };
+            ConfigureFleetButton(
+                _mountAllButton,
+                "▶ Mount all",
+                Color.FromArgb(219, 234, 254),
+                Color.FromArgb(29, 78, 216));
+            ConfigureFleetButton(
+                _unmountAllButton,
+                "⏏ Unmount all",
+                Color.FromArgb(241, 245, 249),
+                Color.FromArgb(71, 85, 105));
+            bulkActions.Controls.Add(_mountAllButton);
+            bulkActions.Controls.Add(_unmountAllButton);
+
+            fleet.Controls.Add(header, 0, 0);
+            fleet.Controls.Add(_profileGrid, 0, 1);
+            fleet.Controls.Add(bulkActions, 0, 2);
+            return fleet;
+        }
+
+        private void ConfigureProfileGrid()
+        {
+            _profileGrid.Dock = DockStyle.Fill;
+            _profileGrid.Margin = new Padding(8, 2, 8, 0);
+            _profileGrid.AllowUserToAddRows = false;
+            _profileGrid.AllowUserToDeleteRows = false;
+            _profileGrid.AllowUserToResizeRows = false;
+            _profileGrid.AllowUserToOrderColumns = false;
+            _profileGrid.AutoGenerateColumns = false;
+            _profileGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            _profileGrid.BackgroundColor = Color.White;
+            _profileGrid.BorderStyle = BorderStyle.FixedSingle;
+            _profileGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+            _profileGrid.ColumnHeadersBorderStyle =
+                DataGridViewHeaderBorderStyle.Single;
+            _profileGrid.ColumnHeadersHeightSizeMode =
+                DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            _profileGrid.EnableHeadersVisualStyles = false;
+            _profileGrid.GridColor = Color.FromArgb(226, 232, 240);
+            _profileGrid.MultiSelect = false;
+            _profileGrid.ReadOnly = true;
+            _profileGrid.RowHeadersVisible = false;
+            _profileGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            _profileGrid.DefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.White,
+                ForeColor = Color.FromArgb(30, 41, 59),
+                SelectionBackColor = Color.FromArgb(219, 234, 254),
+                SelectionForeColor = Color.FromArgb(30, 64, 175)
+            };
+            _profileGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.FromArgb(241, 245, 249),
+                ForeColor = Color.FromArgb(71, 85, 105),
+                Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
+                Alignment = DataGridViewContentAlignment.MiddleLeft
+            };
+
+            _profileGrid.Columns.Add(CreateProfileGridColumn("Name", "Name", 16, 80));
+            _profileGrid.Columns.Add(CreateProfileGridColumn("Host", "Host", 18, 90));
+            _profileGrid.Columns.Add(CreateProfileGridColumn("RemoteRoot", "Remote root", 26, 120));
+            _profileGrid.Columns.Add(CreateProfileGridColumn("Drive", "Drive", 8, 48));
+            _profileGrid.Columns.Add(CreateProfileGridColumn("Auth", "Auth", 12, 64));
+            _profileGrid.Columns.Add(CreateProfileGridColumn("Startup", "Startup", 10, 55));
+            _profileGrid.Columns.Add(CreateProfileGridColumn("Status", "Status", 12, 65));
+        }
+
+        private static DataGridViewTextBoxColumn CreateProfileGridColumn(
+            string name,
+            string headerText,
+            float fillWeight,
+            int minimumWidth)
+        {
+            return new DataGridViewTextBoxColumn
+            {
+                Name = name,
+                HeaderText = headerText,
+                FillWeight = fillWeight,
+                MinimumWidth = minimumWidth,
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            };
+        }
+
+        private static void ConfigureFleetButton(
+            Button button,
+            string text,
+            Color backColor,
+            Color foreColor)
+        {
+            button.Text = text;
+            button.AutoSize = true;
+            button.Height = 25;
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+            button.BackColor = backColor;
+            button.ForeColor = foreColor;
+            button.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
+            button.Cursor = Cursors.Hand;
+            button.Margin = new Padding(0, 0, 6, 0);
+            ApplyRoundedRegion(button, 5);
+        }
+
         private void WireEvents()
         {
             _profiles.SelectedIndexChanged += (sender, args) => LoadSelectedProfile();
+            _profileGrid.SelectionChanged += (sender, args) =>
+                LoadProfileSelectedInGrid();
             _authenticationMode.SelectedIndexChanged += (sender, args) =>
             {
                 UpdateAuthenticationControls();
@@ -685,6 +866,7 @@ namespace ThreeWa.SshDrive.App
             _remoteRoot.TextChanged += (sender, args) => RefreshActionState();
             _privateKeyPath.TextChanged += (sender, args) => RefreshActionState();
             _password.TextChanged += (sender, args) => RefreshActionState();
+            _autoMountOnStartup.CheckedChanged += (sender, args) => RefreshActionState();
             _driveLetter.SelectedIndexChanged += (sender, args) => RefreshActionState();
             _port.ValueChanged += (sender, args) => RefreshActionState();
             _newButton.Click += (sender, args) => NewProfile();
@@ -701,6 +883,10 @@ namespace ThreeWa.SshDrive.App
                 await RunBusyAsync(InstallDriverAsync);
             _unmountButton.Click += async (sender, args) =>
                 await RunBusyAsync(UnmountAsync);
+            _mountAllButton.Click += async (sender, args) =>
+                await RunBusyAsync(MountAllProfilesAsync);
+            _unmountAllButton.Click += async (sender, args) =>
+                await RunBusyAsync(UnmountAllProfilesAsync);
             _explorerButton.Click += (sender, args) => ExecuteUi(OpenExplorer);
             _mascotPicture.Click += (sender, args) => CycleMascotQuote();
             _speechBubble.Click += (sender, args) => CycleMascotQuote();
@@ -709,7 +895,10 @@ namespace ThreeWa.SshDrive.App
             _checkUpdatesButton.Click += async (sender, args) =>
                 await CheckForUpdatesAsync(manual: true);
             Shown += async (sender, args) =>
+            {
+                await AutoMountProfilesOnStartupAsync();
                 await CheckForUpdatesAsync(manual: false);
+            };
             FormClosing += OnFormClosing;
             FormClosed += (sender, args) =>
             {
@@ -762,6 +951,79 @@ namespace ThreeWa.SshDrive.App
             {
                 _profiles.EndUpdate();
             }
+
+            RefreshProfileGrid();
+        }
+
+        private void RefreshProfileGrid()
+        {
+            _isSynchronizingProfileGrid = true;
+            try
+            {
+                _profileGrid.Rows.Clear();
+                foreach (var profile in _profileItems)
+                {
+                    var mounted = _mountedDrives.TryGetValue(
+                        profile.DriveLetter ?? string.Empty,
+                        out var drive);
+                    var status = !mounted
+                        ? "未掛載"
+                        : drive.IsConnected ? "已掛載" : "連線中斷";
+                    var index = _profileGrid.Rows.Add(
+                        profile.Name,
+                        profile.Host,
+                        profile.RemoteRoot,
+                        profile.DriveLetter,
+                        profile.AuthenticationMode == AuthenticationMode.Password
+                            ? "Password"
+                            : "Private key",
+                        profile.AutoMountOnStartup ? "啟用" : "—",
+                        status);
+                    var row = _profileGrid.Rows[index];
+                    row.Tag = profile.Name;
+                    row.Cells["Status"].Style.ForeColor = mounted && drive.IsConnected
+                        ? Color.FromArgb(22, 163, 74)
+                        : mounted
+                            ? Color.FromArgb(217, 119, 6)
+                            : Color.FromArgb(100, 116, 139);
+                }
+            }
+            finally
+            {
+                _isSynchronizingProfileGrid = false;
+            }
+
+            SelectProfileGrid(_selectedProfileName);
+        }
+
+        private void SelectProfileGrid(string profileName)
+        {
+            _isSynchronizingProfileGrid = true;
+            try
+            {
+                _profileGrid.ClearSelection();
+                if (string.IsNullOrWhiteSpace(profileName))
+                    return;
+
+                foreach (DataGridViewRow row in _profileGrid.Rows)
+                {
+                    if (!string.Equals(
+                            row.Tag as string,
+                            profileName,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    row.Selected = true;
+                    _profileGrid.CurrentCell = row.Cells[0];
+                    return;
+                }
+            }
+            finally
+            {
+                _isSynchronizingProfileGrid = false;
+            }
         }
 
         private void LoadSelectedProfile()
@@ -777,6 +1039,7 @@ namespace ThreeWa.SshDrive.App
 
             _selectedProfileName = profile.Name;
             WriteForm(profile);
+            SelectProfileGrid(profile.Name);
             var mounted = IsMounted(profile.DriveLetter);
             SetStatus(mounted
                 ? "Mounted at " + profile.DriveLetter
@@ -790,6 +1053,7 @@ namespace ThreeWa.SshDrive.App
         {
             _selectedProfileName = null;
             _profiles.SelectedIndex = -1;
+            SelectProfileGrid(null);
             WriteForm(new DriveProfile());
             SetStatus("New profile");
             SetMascotSpeech("已建立新的設定檔草稿，填寫完成後點擊 Save 即可保存！");
@@ -823,7 +1087,31 @@ namespace ThreeWa.SshDrive.App
             _profileStore.Save(_profileItems);
             RefreshProfileSelector(null);
             NewProfile();
+            RefreshProfileGrid();
             SetMascotSpeech("設定檔已刪除完畢。");
+        }
+
+        private void LoadProfileSelectedInGrid()
+        {
+            if (_isSynchronizingProfileGrid ||
+                _profileGrid.SelectedRows.Count != 1)
+            {
+                return;
+            }
+
+            var profileName = _profileGrid.SelectedRows[0].Tag as string;
+            if (string.IsNullOrWhiteSpace(profileName) ||
+                string.Equals(
+                    profileName,
+                    _selectedProfileName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var index = _profiles.FindStringExact(profileName);
+            if (index >= 0)
+                _profiles.SelectedIndex = index;
         }
 
         private async Task TestAndTrustAsync()
@@ -847,12 +1135,56 @@ namespace ThreeWa.SshDrive.App
             await MountAsync();
         }
 
-        private async Task MountAsync()
+        private async Task AutoMountProfilesOnStartupAsync()
         {
-            var profile = ReadForm();
+            var profiles = _profileItems
+                .Where(profile => profile.AutoMountOnStartup)
+                .ToList();
+            if (profiles.Count == 0)
+                return;
+
+            var mountedCount = 0;
+            var skippedCount = 0;
+            foreach (var profile in profiles)
+            {
+                if (!AutoMountProfilePolicy.ShouldAttemptOnStartup(profile))
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                var succeeded = await RunBusyAsync(
+                    () => MountProfileAsync(profile, saveProfile: false),
+                    showError: false);
+                if (succeeded && IsMounted(profile.DriveLetter))
+                    mountedCount++;
+                else
+                    skippedCount++;
+            }
+
+            var result = $"啟動後自動掛載：{mountedCount} 個成功";
+            if (skippedCount > 0)
+                result += $"，{skippedCount} 個略過或失敗";
+            SetStatus(result, skippedCount == 0);
+            SetMascotSpeech(skippedCount == 0
+                ? "啟動後自動掛載已完成，遠端工作區隨時可用～✨"
+                : "部分自動掛載沒有完成，請查看設定後再手動掛載喔～");
+        }
+
+        private Task MountAsync()
+        {
+            return MountProfileAsync(ReadForm(), saveProfile: true);
+        }
+
+        private async Task MountProfileAsync(
+            DriveProfile profile,
+            bool saveProfile)
+        {
             var errors = DriveProfileValidator.Validate(profile);
             if (errors.Count > 0)
                 throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
+            if (saveProfile)
+                ValidateProfileCanBeSaved(profile);
 
             var runtime = WinFspRuntimePreflight.CheckX64();
             if (!runtime.IsValid)
@@ -872,9 +1204,87 @@ namespace ThreeWa.SshDrive.App
             var mounted = await Task.Run(() => _mountManager.Mount(profile));
             _mountedDrives.Add(drive, mounted);
             RefreshDriveLetters();
-            UpsertProfile(profile);
+            if (saveProfile)
+                UpsertProfile(profile);
+            else
+                RefreshProfileGrid();
             SetStatus("Mounted " + profile.Name + " at " + drive);
             SetMascotSpeech($"已成功掛載到 {drive} 槽！Antigravity 開發全速啟動～(๑•̀ㅂ•́)و✧");
+        }
+
+        private async Task MountAllProfilesAsync()
+        {
+            var profiles = _profileItems.ToList();
+            var mountedCount = 0;
+            var skippedCount = 0;
+            var failedCount = 0;
+
+            foreach (var profile in profiles)
+            {
+                if (IsMounted(profile.DriveLetter))
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                if (DriveProfileValidator.Validate(profile).Count > 0)
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                try
+                {
+                    await MountProfileAsync(profile, saveProfile: false);
+                    mountedCount++;
+                }
+                catch
+                {
+                    failedCount++;
+                }
+            }
+
+            RefreshProfileGrid();
+            var result = $"批次掛載完成：{mountedCount} 個成功";
+            if (skippedCount > 0)
+                result += $"，{skippedCount} 個略過";
+            if (failedCount > 0)
+                result += $"，{failedCount} 個失敗";
+            SetStatus(result, failedCount == 0);
+            SetMascotSpeech(failedCount == 0
+                ? "Profile fleet 已完成批次掛載～✨"
+                : "部分 Profile 沒有掛載成功，請查看狀態後再試一次喔～");
+        }
+
+        private async Task UnmountAllProfilesAsync()
+        {
+            var mountedDrives = _mountedDrives.ToList();
+            var unmountedCount = 0;
+            var failedCount = 0;
+
+            foreach (var pair in mountedDrives)
+            {
+                try
+                {
+                    await Task.Run(() => pair.Value.Dispose());
+                    _mountedDrives.Remove(pair.Key);
+                    unmountedCount++;
+                }
+                catch
+                {
+                    failedCount++;
+                }
+            }
+
+            RefreshDriveLetters();
+            RefreshProfileGrid();
+            var result = $"批次卸載完成：{unmountedCount} 個成功";
+            if (failedCount > 0)
+                result += $"，{failedCount} 個失敗";
+            SetStatus(result, failedCount == 0);
+            SetMascotSpeech(failedCount == 0
+                ? "所有 3waSshDrive 掛載已安全卸載。"
+                : "部分掛載沒有卸載成功，請稍後再試。");
         }
 
         private async Task InstallDriverAsync()
@@ -914,6 +1324,7 @@ namespace ThreeWa.SshDrive.App
             await Task.Run(() => mounted.Dispose());
             _mountedDrives.Remove(drive);
             RefreshDriveLetters();
+            RefreshProfileGrid();
             SetStatus("Unmounted " + drive);
             SetMascotSpeech($"磁碟機 {drive} 已卸載，辛苦啦～隨時點我重新掛載喔！☕");
         }
@@ -934,6 +1345,8 @@ namespace ThreeWa.SshDrive.App
                 if (disconnected.Count == 0)
                     return;
 
+                RefreshProfileGrid();
+
                 _isReconnecting = true;
                 try
                 {
@@ -948,6 +1361,7 @@ namespace ThreeWa.SshDrive.App
                             SetStatus($"Mounted at {drive.DriveLetter}", true);
                             SetMascotSpeech($"已成功自動重新連線至 {drive.DriveLetter} 槽！繼續工作吧～✨");
                             RefreshDriveLetters();
+                            RefreshProfileGrid();
 
                             if (!Visible)
                             {
@@ -962,6 +1376,7 @@ namespace ThreeWa.SshDrive.App
                         {
                             SetStatus($"磁碟機 {drive.DriveLetter} 重新連線失敗，等待下次重試…", false);
                             CrashLogger.Log("AutoReconnect", ex);
+                            RefreshProfileGrid();
                         }
                     }
                 }
@@ -1001,6 +1416,8 @@ namespace ThreeWa.SshDrive.App
 
         private void UpsertProfile(DriveProfile profile)
         {
+            ValidateProfileCanBeSaved(profile);
+
             if (!string.IsNullOrWhiteSpace(_selectedProfileName))
             {
                 _profileItems.RemoveAll(item =>
@@ -1016,6 +1433,21 @@ namespace ThreeWa.SshDrive.App
             _profileStore.Save(_profileItems);
             _selectedProfileName = profile.Name;
             RefreshProfileSelector(profile.Name);
+        }
+
+        private void ValidateProfileCanBeSaved(DriveProfile profile)
+        {
+            var candidates = _profileItems
+                .Where(item => !string.Equals(
+                    item.Name,
+                    _selectedProfileName,
+                    StringComparison.OrdinalIgnoreCase))
+                .Concat(new[] { profile });
+            var errors = ProfileSetValidator.ValidateUniqueNamesAndDriveLetters(
+                candidates);
+            if (errors.Count > 0)
+                throw new InvalidOperationException(
+                    string.Join(Environment.NewLine, errors));
         }
 
         private DriveProfile ReadForm()
@@ -1034,7 +1466,10 @@ namespace ThreeWa.SshDrive.App
                     ? _password.Text
                     : null,
                 HostKeyFingerprintSha256 = _hostFingerprint.Text.Trim(),
-                ReadOnly = _readOnly.Checked
+                ReadOnly = _readOnly.Checked,
+                AutoMountOnStartup =
+                    SelectedAuthenticationMode() == AuthenticationMode.PrivateKey &&
+                    _autoMountOnStartup.Checked
             };
         }
 
@@ -1056,6 +1491,8 @@ namespace ThreeWa.SshDrive.App
             _password.Text = profile.Password ?? string.Empty;
             _hostFingerprint.Text = profile.HostKeyFingerprintSha256 ?? string.Empty;
             _readOnly.Checked = profile.ReadOnly;
+            _autoMountOnStartup.Checked = profile.AutoMountOnStartup &&
+                profile.AuthenticationMode == AuthenticationMode.PrivateKey;
             UpdateAuthenticationControls();
         }
 
@@ -1069,12 +1506,14 @@ namespace ThreeWa.SshDrive.App
                 throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
         }
 
-        private async Task RunBusyAsync(Func<Task> operation)
+        private async Task<bool> RunBusyAsync(
+            Func<Task> operation,
+            bool showError = true)
         {
             if (_busy || _isApplyingUpdate)
-                return;
+                return false;
             if (!_updateActivityGate.TryBeginActivity(out var activity))
-                return;
+                return false;
 
             using (activity)
             {
@@ -1082,11 +1521,16 @@ namespace ThreeWa.SshDrive.App
                 try
                 {
                     await operation();
+                    return true;
                 }
                 catch (Exception exception)
                 {
-                    ShowError(exception);
+                    if (showError)
+                        ShowError(exception);
+                    else
+                        SetStatus("自動掛載失敗：" + exception.Message, false);
                     SetMascotSpeech("嗚哇！操作好像遇到問題了，請檢查設定或網路喔＞＜");
+                    return false;
                 }
                 finally
                 {
@@ -1149,6 +1593,7 @@ namespace ThreeWa.SshDrive.App
             var actionsDisabled = _busy || _isApplyingUpdate;
             UseWaitCursor = actionsDisabled;
             _profiles.Enabled = !actionsDisabled;
+            _profileGrid.Enabled = !actionsDisabled;
             _newButton.Enabled = !actionsDisabled;
             _testButton.Enabled = !actionsDisabled && IsFormReadyForMount();
             _unmountButton.Enabled = !actionsDisabled && _mountedDrives.Count > 0;
@@ -1160,11 +1605,18 @@ namespace ThreeWa.SshDrive.App
             _checkUpdatesButton.Enabled =
                 !actionsDisabled && !_isCheckingUpdates;
             _readOnly.Enabled = !actionsDisabled;
+            _autoMountOnStartup.Enabled =
+                !actionsDisabled &&
+                SelectedAuthenticationMode() == AuthenticationMode.PrivateKey;
 
             var runtime = WinFspRuntimePreflight.CheckX64();
             var canMount = !actionsDisabled && runtime.IsValid && IsFormReadyForMount();
             _testAndMountButton.Enabled = canMount;
             _mountButton.Enabled = canMount;
+            _mountAllButton.Enabled = !actionsDisabled && runtime.IsValid &&
+                _profileItems.Count > 0;
+            _unmountAllButton.Enabled = !actionsDisabled &&
+                _mountedDrives.Count > 0;
             _installDriverButton.Visible = !runtime.IsValid;
 
             UpdateAuthenticationControls();
@@ -1307,6 +1759,7 @@ namespace ThreeWa.SshDrive.App
                 _browseButton.Visible = false;
                 _password.Visible = true;
                 _password.Enabled = actionsEnabled;
+                _autoMountOnStartup.Checked = false;
             }
         }
 

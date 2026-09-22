@@ -47,6 +47,7 @@ namespace ThreeWa.SshDrive.Core.Tests
                         AuthenticationMode = AuthenticationMode.Password,
                         PrivateKeyPath = @"C:\keys\id_ed25519",
                         HostKeyFingerprintSha256 = "SHA256:abc123",
+                        AutoMountOnStartup = true,
                         Password = "must-not-be-persisted"
                     }
                 });
@@ -62,6 +63,7 @@ namespace ThreeWa.SshDrive.Core.Tests
                 Assert.AreEqual(AuthenticationMode.Password, loaded.AuthenticationMode);
                 Assert.AreEqual(@"C:\keys\id_ed25519", loaded.PrivateKeyPath);
                 Assert.AreEqual("SHA256:abc123", loaded.HostKeyFingerprintSha256);
+                Assert.IsTrue(loaded.AutoMountOnStartup);
                 Assert.IsNull(loaded.Password);
                 Assert.IsFalse(File.ReadAllText(filePath).Contains(
                     "must-not-be-persisted"));
@@ -71,6 +73,12 @@ namespace ThreeWa.SshDrive.Core.Tests
             {
                 Directory.Delete(directory, true);
             }
+        }
+
+        [TestMethod]
+        public void NewProfile_DoesNotAutoMountByDefault()
+        {
+            Assert.IsFalse(new DriveProfile().AutoMountOnStartup);
         }
 
         private static string CreateTemporaryDirectory()
