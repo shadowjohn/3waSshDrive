@@ -74,3 +74,19 @@
 - Added the user-requested source IP allowlist to the same server design: server-wide IPv4/IPv6 hosts or CIDRs for SSH and SFTP, with loopback-only initial access and explicit network exposure.
 - Specified matching firewall source rules and OpenSSH login-source restrictions, handling additive AllowUsers rules, existing broad firewall exceptions, partial failures, and fresh-connection acceptance from allowed and denied sources.
 - Verified the design against official Microsoft/OpenSSH rule documentation. This remains documentation only; no firewall, sshd configuration, service, or account changes have been applied.
+
+## 2026-09-29 - Server tabs, bubble forms, and password failure bans
+
+- Added the requested remote-mount/local-server tabs and bubble add/edit forms to the design. Inline field validation, retained non-secret drafts, UAC cancellation, duplicate-submit protection, and keyboard focus must preserve the existing mount lifecycle; the remote Test & Mount AcceptButton must not run from the server tab or a bubble.
+- User clarified initial failure counters: source IP plus existing Windows account (SID) are independent; nonexistent account names share one counter per source IP. Any counter reaching five password failures in a rolling minute bans the entire source IP for five minutes.
+- Defined the IP-level escalation: after expiry, the next password failure bans for one hour; further failures after expiry keep the one-hour stage until a new successful password/publickey login resets that IP. Active-ban delayed success events do not clear the ban.
+- Added a narrowly scoped independent ServerGuard Windows service to monitor verified OpenSSH events and manage timed firewall bans while the GUI is closed. Recorded asynchronous enforcement, event deduplication, durable recovery, existing-session effects, and independent Windows account lockout limitations.
+- Read existing UI code and official OpenSSH/Windows documentation, then completed one focused consistency review after the counter clarification. Only the spec/history changed; existing UTF-8 without BOM and CRLF are preserved, and whitespace checks are required. No app build, desktop UI run, account/service/firewall change, or live login/ban validation was performed.
+
+## 2026-09-29 - Seven-day event grid
+
+- Added the requested third Events tab with a read-only grid for network/connection loss, reconnects, inbound connections/authentication, bans, and unbans. Defined time/source/type/outcome/account/IP filters, safe details, paging, and non-disruptive refresh.
+- Defined rolling 168-hour event retention with durable per-user client and protected machine-level server event stores; ServerGuard continues collecting server events with the UI closed. Grid pause does not pause collection or protection.
+- Identified both UI heartbeat and SFTP operation-level reconnects as event sources; structured correlation/deduplication must prevent missed short reconnects and duplicate disconnect rows. Connection/authentication success is distinct from transferred-file success.
+- Kept event retention separate from ban deadlines, escalation state, and event-processing cursors. Only application event history is cleaned; existing crash logs and Windows native event logs remain separate.
+- Documentation-only checks preserve UTF-8 without BOM/CRLF and pass git diff whitespace validation. Desktop rendering, actual event collection, retention cleanup, authentication, and ban enforcement remain unimplemented and unverified.
