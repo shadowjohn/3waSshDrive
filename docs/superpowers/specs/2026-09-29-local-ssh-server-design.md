@@ -47,6 +47,28 @@ PoC 程式、免安裝套件與完整結果保留在 Git 忽略的 artifacts/cur
 - 若背景工作還需要持續使用遠端掛載，則另外評估 WinFsp 服務化、服務帳號／憑證及各使用者的磁碟可見性與存取隔離；不是把現有 GUI 勾成系統管理員或裝好 sshd 就一併解決。[WinFsp 服務架構](https://winfsp.dev/doc/WinFsp-Service-Architecture/)
 - 本輪只記錄限制與候選方案，不改政府政策、不啟用自動登入、不執行實際登出或修改服務。正式驗收需在隔離環境區分正常／強制登出、重新登入且網路延遲、傳輸中斷、服務存活與一般桌面的掛載可見性；既有 loopback PoC 不涵蓋這些情境。
 
+### 0.2 候選：SYSTEM 排程持有長駐掛載 CLI
+
+使用者提出新增 CLI 模式，由 SYSTEM 每分鐘排程啟動、避免重複執行，以維持登出期間的遠端掛載。此處先記錄可行方向與必要邊界，尚未實作或註冊排程；這是遠端掛載的生命週期方案，不代表已決定整合本機 SSH Server。
+
+```text
+開機觸發＋每分鐘觸發（SYSTEM）
+    → 排程已有執行個體：忽略本次觸發
+    → 否則啟動受保護的 headless host，取得全機獨佔鎖
+        → 載入受管掛載設定、公鑰認證及固定 host fingerprint
+        → 掛載並持續持有 WinFsp／SSH.NET 物件
+        → 初始網路未就緒與後續斷線均由 host 重試
+一般權限 GUI：仍在桌面使用者工作階段，與 host 分開
+```
+
+- **程序必須長駐。** 現有 MountManager 返回的 MountedDrive 持有 WinFsp dispatcher 與 SFTP connection；CLI 掛完就退出不能維持掛載。排程直接等待 host，不透過啟動後立刻退出的 wrapper。每分鐘觸發是在 host 退出後提供重新啟動機會，不是每分鐘卸載／重掛，也不能偵測程序仍在但已卡死。
+- **排程與程序各自防重複。** 排程使用 IgnoreNew；host 再以受保護的 machine-scope 獨佔鎖防止不同入口同時啟動，不能僅檢查程序名稱或 PID 檔內容。現有 SingleInstanceLock 使用 per-user LocalAppData，需明確設計 host scope。長駐排程設定 ExecutionTimeLimit=PT0S，避免預設 72 小時被終止；電源、閒置及實際受管政策仍須驗證。人工停止受管掛載時亦需停用啟動意圖，否則下一次排程會再啟動。[多實例政策](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-multipleinstances)、[執行時間限制](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-executiontimelimit)
+- **SYSTEM 的磁碟可見性不同。** pinned WinFsp 的 mount.c 在 LocalSystem 下直接呼叫 DefineDosDeviceW，依 Windows 規則建立 Global MS-DOS device；其他登入工作階段可解析該磁碟代號。同字母的使用者 local mapping 會遮蔽 global mapping，須檢查並避免與 GUI 掛載衝突，不能自動拆掉未知來源的磁碟。[LocalSystem 命名空間](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-definedosdevicew)、[local 優先順序](https://learn.microsoft.com/en-us/windows/win32/fileio/defining-an-ms-dos-device-name)
+- **目前尚無指定本機帳號隔離。** SftpReadOnlyFileSystem.GetSecurityByName 回傳 null，PersistentAcls=false；不能宣稱其他標準使用者無法讀寫 SYSTEM 掛載。產品化前需在檔案系統存取檢查層限制允許的 Windows SID，並驗證未授權帳號被拒絕。WinFsp Mount 的 securityDescriptor 參數僅適用新建目錄掛載點，不足以替磁碟代號補上此隔離。
+- **程式與設定需有 machine 部署邊界。** 目前 Velopack 為 per-user 安裝、可由該使用者更新；不可讓 SYSTEM 直接執行使用者可改寫的 EXE／DLL／腳本。候選為獨立 host 放受 ACL 保護的 Program Files，設定／狀態與憑證放受控 machine 路徑，安裝／排程註冊按需提權。GUI 保持一般身分；host 更新需協調停止／重啟，不能直接沿用只處理 GUI 自有掛載的 updater。
+- **本機 SYSTEM 不等於遠端 root。** 遠端仍使用 profile 指定的 SSH 帳號；同一掛載的本機存取者共用該遠端身分。現有 ProfileStore 是 per-user AppData，SYSTEM 不會自動取得桌面設定；需明確配置機器用 profile／認證來源，不自動搬移既有私鑰、不把密碼放排程參數，並保留 host key 驗證。無人值守的私鑰解鎖方式仍須設計。
+- **最小 PoC 邊界。** 單一公鑰 profile、單一測試磁碟、先唯讀；驗證一般桌面存取、未授權標準帳號拒絕、同字母衝突、真正登出／重新登入後存活、重複觸發只留一個 host、host 結束後排程重啟，以及初始網路延遲／斷線重試。此輪只有原始碼與官方文件證據，以上 SYSTEM 執行、存取隔離與登出測試均未執行。
+
 ## 1. 目的與架構
 
 3waSshDrive 新增「本機 SSH Server」管理頁面，由 Windows OpenSSH 的 sshd 服務處理登入、加密、SFTP 與終端機。既有 SSH.NET／WinFsp 遠端磁碟掛載流程保留；不要求升級 .NET Framework 4.7.2，也不自行實作 SSH 協定。
