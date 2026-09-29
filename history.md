@@ -55,3 +55,22 @@
 - A `Test & Trust` probe to an OpenSSH 9.6 host failed with `MAC error` after key exchange; OpenSSH itself negotiated normally, so this was not an authentication, key, or host-key-pinning failure.
 - Advanced the source-built SSH.NET submodule to upstream `f099365c`, which resets the server MAC after `TransformFinalBlock` on .NET Framework before the next encrypted packet.
 - The rebuilt SFTP probe authenticated with the supplied PPK, read root metadata and a directory listing, and captured the host key successfully. No remote writes were made.
+
+## 2026-09-29 - Local SSH server account direction
+
+- Confirmed intended scope: local SFTP file transfer and a full SSH terminal. The user selected Windows native accounts following the Windows OpenSSH management-interface recommendation.
+- Password authentication uses the corresponding Windows account password. Planned account controls should delegate credential creation/reset to Windows without persisting a separate password copy in application profiles.
+- This is a design decision only. No server implementation, account creation, service startup, or firewall changes have been performed. Live SSH/SFTP login, account permissions, and mounting a Windows SFTP server remain unverified.
+
+## 2026-09-29 - Local SSH server service and public-key design
+
+- Confirmed service start/disable controls and per-account public-key management as first-version requirements, in addition to Windows native accounts, SFTP, and a full SSH terminal.
+- Added docs/superpowers/specs/2026-09-29-local-ssh-server-design.md for review: independent Windows OpenSSH service, Windows-managed passwords, multiple public keys, publickey-only SSH mode, scoped elevation, and existing-config preservation.
+- Distinguished service stop from Disabled startup type and from ending established sessions. Key removal and SSH access revocation must be verified with fresh connections; neither is presented as forced logout.
+- Checked the design against Microsoft/OpenSSH documentation and one independent consistency review; addressed elevated read access for other users public-key lists. Documentation-only verification preserves existing history bytes and checks whitespace/encoding. No build, account creation, service/firewall changes, or live SSH/SFTP tests were performed; implementation and runtime acceptance remain pending.
+
+## 2026-09-29 - SSH source IP allowlist requirement
+
+- Added the user-requested source IP allowlist to the same server design: server-wide IPv4/IPv6 hosts or CIDRs for SSH and SFTP, with loopback-only initial access and explicit network exposure.
+- Specified matching firewall source rules and OpenSSH login-source restrictions, handling additive AllowUsers rules, existing broad firewall exceptions, partial failures, and fresh-connection acceptance from allowed and denied sources.
+- Verified the design against official Microsoft/OpenSSH rule documentation. This remains documentation only; no firewall, sshd configuration, service, or account changes have been applied.
