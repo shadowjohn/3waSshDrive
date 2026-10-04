@@ -361,7 +361,9 @@ namespace ThreeWa.SshDrive.App
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             for (var r = 0; r < 10; r++)
             {
-                fields.RowStyles.Add(new RowStyle(SizeType.Percent, 10f));
+                fields.RowStyles.Add(r == 0
+                    ? new RowStyle(SizeType.AutoSize)
+                    : new RowStyle(SizeType.Percent, 10f));
             }
 
             ConfigureComboBox(_profiles);
@@ -406,7 +408,7 @@ namespace ThreeWa.SshDrive.App
             _newButton.ForeColor = Color.FromArgb(29, 78, 216);
             _newButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             _newButton.Cursor = Cursors.Hand;
-            _newButton.Height = 27;
+            _newButton.AutoSize = true;
             ApplyRoundedRegion(_newButton, 6);
 
             _saveButton.Text = "💾 Save";
@@ -415,7 +417,7 @@ namespace ThreeWa.SshDrive.App
             _saveButton.BackColor = Color.FromArgb(239, 246, 255);
             _saveButton.ForeColor = Color.FromArgb(29, 78, 216);
             _saveButton.Cursor = Cursors.Hand;
-            _saveButton.Height = 27;
+            _saveButton.AutoSize = true;
             ApplyRoundedRegion(_saveButton, 6);
 
             _deleteButton.Text = "🗑 Delete";
@@ -424,7 +426,7 @@ namespace ThreeWa.SshDrive.App
             _deleteButton.BackColor = Color.FromArgb(254, 242, 242);
             _deleteButton.ForeColor = Color.FromArgb(185, 28, 28);
             _deleteButton.Cursor = Cursors.Hand;
-            _deleteButton.Height = 27;
+            _deleteButton.AutoSize = true;
             ApplyRoundedRegion(_deleteButton, 6);
 
             _browseButton.Text = "📁 Browse…";
@@ -447,6 +449,12 @@ namespace ThreeWa.SshDrive.App
             profileButtons.Controls.Add(_deleteButton);
             _cancelOperationButton.Text = "取消連線";
             _cancelOperationButton.AutoSize = true;
+            foreach (var button in new[] { _newButton, _saveButton, _deleteButton, _cancelOperationButton })
+            {
+                button.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                button.Margin = new Padding(3);
+                button.Padding = new Padding(6, 2, 6, 2);
+            }
             _cancelOperationButton.Click += (sender, args) => CancelSelectedOperation();
             profileButtons.Controls.Add(_cancelOperationButton);
 
