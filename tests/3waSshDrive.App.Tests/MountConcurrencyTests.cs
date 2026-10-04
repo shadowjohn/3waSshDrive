@@ -261,7 +261,13 @@ namespace ThreeWa.SshDrive.App.Tests
         internal static MainForm CreateForm(Func<DriveProfile, IRemoteFileSystem> factory, ISshConnectionProbe probe = null)
         {
             var store = new ProfileStore(Path.Combine(Path.GetTempPath(), "sshdrive-tests-" + Guid.NewGuid(), "profiles.json"));
-            var form = new MainForm(store, probe ?? new SshConnectionProbe(), new MountManager(factory, fs => new TestHost()), new UpdateService(new TestUpdater(), new TestLog()), () => new HashSet<string>(), (operation, error) => { }, () => WinFspRuntimeVerification.Success("test-native", "test-driver", "test-hash", "test-hash"));
+            var form = new MainForm(store, probe ?? new SshConnectionProbe(), new MountManager(factory, fs => new TestHost()), new UpdateService(new TestUpdater(), new TestLog()), () => new HashSet<string>(), (operation, error) => { }, () => WinFspRuntimeVerification.Success("test-native", "test-driver", "test-hash", "test-hash"), () => null);
+            form.Disposed += (sender, args) =>
+            {
+                Field<System.Windows.Forms.Timer>(form, "_mascotLoopTimer").Dispose();
+                Field<System.Windows.Forms.Timer>(form, "_reconnectTimer").Dispose();
+                Field<NotifyIcon>(form, "_notifyIcon").Dispose();
+            };
             var handle = form.Handle;
             SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
             return form;

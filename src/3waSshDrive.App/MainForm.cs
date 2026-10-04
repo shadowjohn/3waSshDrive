@@ -23,6 +23,7 @@ namespace ThreeWa.SshDrive.App
         private readonly Func<HashSet<string>> _getLogicalDrives;
         private readonly Action<string, Exception> _logOperationFailure;
         private readonly Func<WinFspRuntimeVerification> _checkRuntime;
+        private readonly Func<string> _getMascotVideoPath;
         private readonly UpdateService _updateService;
         private readonly UpdateCoordinator _updateCoordinator;
         private readonly UpdateActivityGate _updateActivityGate =
@@ -109,7 +110,8 @@ namespace ThreeWa.SshDrive.App
             UpdateService updateService,
             Func<HashSet<string>> getLogicalDrives = null,
             Action<string, Exception> logOperationFailure = null,
-            Func<WinFspRuntimeVerification> checkRuntime = null)
+            Func<WinFspRuntimeVerification> checkRuntime = null,
+            Func<string> getMascotVideoPath = null)
         {
             _profileStore = profileStore ?? throw new ArgumentNullException(nameof(profileStore));
             _connectionProbe = connectionProbe ?? throw new ArgumentNullException(nameof(connectionProbe));
@@ -117,6 +119,7 @@ namespace ThreeWa.SshDrive.App
             _getLogicalDrives = getLogicalDrives ?? GetMountedLogicalDrives;
             _logOperationFailure = logOperationFailure ?? CrashLogger.Log;
             _checkRuntime = checkRuntime ?? WinFspRuntimePreflight.CheckX64;
+            _getMascotVideoPath = getMascotVideoPath ?? FindMascotVideoPath;
             _updateService = updateService ?? throw new ArgumentNullException(nameof(updateService));
             _updateCoordinator = new UpdateCoordinator(this);
 
@@ -593,7 +596,7 @@ namespace ThreeWa.SshDrive.App
             _mascotPicture.Image = LoadMascotImage();
 
             Control mascotDisplay = _mascotPicture;
-            var videoPath = FindMascotVideoPath();
+            var videoPath = _getMascotVideoPath();
             if (!string.IsNullOrEmpty(videoPath))
             {
                 try
