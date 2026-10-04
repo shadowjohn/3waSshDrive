@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.ExceptionServices;
+using System.Threading;
 using ThreeWa.SshDrive.Core.Remote;
 
 namespace ThreeWa.SshDrive.FileSystem.Mounting
@@ -27,12 +28,21 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
         public string DriveLetter { get; }
 
         public bool IsConnected => !_disposed && _remote.IsConnected;
+        public bool IsConnecting => !_disposed && (_remote as IRemoteConnectionControl)?.IsConnecting == true;
 
         public void EnsureConnected()
+            => EnsureConnected(CancellationToken.None);
+
+        public void EnsureConnected(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!_disposed && !_remote.IsConnected)
             {
-                _remote.Connect();
+                if (_remote is IRemoteConnectionControl control)
+                    control.Connect(cancellationToken);
+                else
+                    _remote.Connect();
+                cancellationToken.ThrowIfCancellationRequested();
             }
         }
 

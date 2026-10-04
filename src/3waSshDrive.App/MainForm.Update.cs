@@ -212,6 +212,7 @@ namespace ThreeWa.SshDrive.App
             _isApplyingUpdate = true;
             RefreshActionState();
             _reconnectTimer.Stop();
+            CancelProfileOperations();
 
             var deadline = DateTime.UtcNow + timeout;
             var pendingActivity = _updateActivityGate.WaitForIdleAsync();

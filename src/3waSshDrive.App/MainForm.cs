@@ -18,8 +18,10 @@ namespace ThreeWa.SshDrive.App
     internal sealed partial class MainForm : Form, IUpdatePreparation
     {
         private readonly ProfileStore _profileStore;
-        private readonly SshConnectionProbe _connectionProbe;
+        private readonly ISshConnectionProbe _connectionProbe;
         private readonly MountManager _mountManager;
+        private readonly Func<HashSet<string>> _getLogicalDrives;
+        private readonly Action<string, Exception> _logOperationFailure;
         private readonly UpdateService _updateService;
         private readonly UpdateCoordinator _updateCoordinator;
         private readonly UpdateActivityGate _updateActivityGate =
@@ -64,7 +66,7 @@ namespace ThreeWa.SshDrive.App
         private System.Windows.Controls.MediaElement _mascotMedia;
         private readonly Timer _mascotLoopTimer = new Timer();
         private readonly Timer _reconnectTimer = new Timer();
-        private bool _isReconnecting;
+
         private readonly Label _mascotName = new Label();
         private readonly Label _mascotSpeech = new Label();
         private readonly Panel _speechBubble = new Panel();
@@ -101,13 +103,17 @@ namespace ThreeWa.SshDrive.App
 
         internal MainForm(
             ProfileStore profileStore,
-            SshConnectionProbe connectionProbe,
+            ISshConnectionProbe connectionProbe,
             MountManager mountManager,
-            UpdateService updateService)
+            UpdateService updateService,
+            Func<HashSet<string>> getLogicalDrives = null,
+            Action<string, Exception> logOperationFailure = null)
         {
             _profileStore = profileStore ?? throw new ArgumentNullException(nameof(profileStore));
             _connectionProbe = connectionProbe ?? throw new ArgumentNullException(nameof(connectionProbe));
             _mountManager = mountManager ?? throw new ArgumentNullException(nameof(mountManager));
+            _getLogicalDrives = getLogicalDrives ?? GetMountedLogicalDrives;
+            _logOperationFailure = logOperationFailure ?? CrashLogger.Log;
             _updateService = updateService ?? throw new ArgumentNullException(nameof(updateService));
             _updateCoordinator = new UpdateCoordinator(this);
 
@@ -439,6 +445,10 @@ namespace ThreeWa.SshDrive.App
             profileButtons.Controls.Add(_newButton);
             profileButtons.Controls.Add(_saveButton);
             profileButtons.Controls.Add(_deleteButton);
+            _cancelOperationButton.Text = "取消連線";
+            _cancelOperationButton.AutoSize = true;
+            _cancelOperationButton.Click += (sender, args) => CancelSelectedOperation();
+            profileButtons.Controls.Add(_cancelOperationButton);
 
             AddRow(fields, 0, "❯", "Profile", _profiles, profileButtons);
             AddRow(fields, 1, "👤", "Name", _name, null);
@@ -874,19 +884,19 @@ namespace ThreeWa.SshDrive.App
             _deleteButton.Click += (sender, args) => ExecuteUi(DeleteCurrentProfile);
             _browseButton.Click += (sender, args) => BrowseForPrivateKey();
             _testAndMountButton.Click += async (sender, args) =>
-                await RunBusyAsync(TestAndMountAsync);
+                await TestAndMountAsync();
             _testButton.Click += async (sender, args) =>
-                await RunBusyAsync(TestAndTrustAsync);
+                await TestAndTrustAsync();
             _mountButton.Click += async (sender, args) =>
-                await RunBusyAsync(MountAsync);
+                await MountAsync();
             _installDriverButton.Click += async (sender, args) =>
                 await RunBusyAsync(InstallDriverAsync);
             _unmountButton.Click += async (sender, args) =>
-                await RunBusyAsync(UnmountAsync);
+                await UnmountAsync();
             _mountAllButton.Click += async (sender, args) =>
-                await RunBusyAsync(MountAllProfilesAsync);
+                await MountAllProfilesAsync();
             _unmountAllButton.Click += async (sender, args) =>
-                await RunBusyAsync(UnmountAllProfilesAsync);
+                await UnmountAllProfilesAsync();
             _explorerButton.Click += (sender, args) => ExecuteUi(OpenExplorer);
             _mascotPicture.Click += (sender, args) => CycleMascotQuote();
             _speechBubble.Click += (sender, args) => CycleMascotQuote();
@@ -966,9 +976,11 @@ namespace ThreeWa.SshDrive.App
                     var mounted = _mountedDrives.TryGetValue(
                         profile.DriveLetter ?? string.Empty,
                         out var drive);
-                    var status = !mounted
+                    var pending = FindOperation(profile.Name, profile.DriveLetter);
+                    var result = ProfileResultStatus(profile.Name, profile.DriveLetter);
+                    var status = pending != null ? pending.Status : result != null ? result : !mounted
                         ? "未掛載"
-                        : drive.IsConnected ? "已掛載" : "連線中斷";
+                        : drive.IsConnecting ? "正在重新連線" : drive.IsConnected ? "已掛載" : "連線中斷";
                     var index = _profileGrid.Rows.Add(
                         profile.Name,
                         profile.Host,
@@ -1044,6 +1056,7 @@ namespace ThreeWa.SshDrive.App
             SetStatus(mounted
                 ? "Mounted at " + profile.DriveLetter
                 : "Profile loaded");
+            ApplySelectedOperationStatus();
             SetMascotSpeech(mounted
                 ? $"「{profile.Name}」已掛載於 {profile.DriveLetter}！隨時可用 Antigravity 進行開發～✨"
                 : $"已切換至「{profile.Name}」設定檔！點擊 Mount 即可掛載到 {profile.DriveLetter} 喔～");
@@ -1114,179 +1127,6 @@ namespace ThreeWa.SshDrive.App
                 _profiles.SelectedIndex = index;
         }
 
-        private async Task TestAndTrustAsync()
-        {
-            var profile = ReadForm();
-            ValidateForProbe(profile);
-            SetStatus("Connecting and reading the SSH host key…");
-            SetMascotSpeech("正在連線測試並讀取 SSH 主機金鑰中，請稍候片刻…🔍");
-
-            var result = await Task.Run(() => _connectionProbe.Probe(profile));
-            profile.HostKeyFingerprintSha256 = result.HostKeyFingerprintSha256;
-            _hostFingerprint.Text = result.HostKeyFingerprintSha256;
-            UpsertProfile(profile);
-            SetStatus("Trusted " + result.HostKeyFingerprintSha256);
-            SetMascotSpeech("SSH 連線測試成功！主機指紋已安全記錄～✨");
-        }
-
-        private async Task TestAndMountAsync()
-        {
-            await TestAndTrustAsync();
-            await MountAsync();
-        }
-
-        private async Task AutoMountProfilesOnStartupAsync()
-        {
-            var profiles = _profileItems
-                .Where(profile => profile.AutoMountOnStartup)
-                .ToList();
-            if (profiles.Count == 0)
-                return;
-
-            var mountedCount = 0;
-            var skippedCount = 0;
-            foreach (var profile in profiles)
-            {
-                if (!AutoMountProfilePolicy.ShouldAttemptOnStartup(profile))
-                {
-                    skippedCount++;
-                    continue;
-                }
-
-                var succeeded = await RunBusyAsync(
-                    () => MountProfileAsync(profile, saveProfile: false),
-                    showError: false);
-                if (succeeded && IsMounted(profile.DriveLetter))
-                    mountedCount++;
-                else
-                    skippedCount++;
-            }
-
-            var result = $"啟動後自動掛載：{mountedCount} 個成功";
-            if (skippedCount > 0)
-                result += $"，{skippedCount} 個略過或失敗";
-            SetStatus(result, skippedCount == 0);
-            SetMascotSpeech(skippedCount == 0
-                ? "啟動後自動掛載已完成，遠端工作區隨時可用～✨"
-                : "部分自動掛載沒有完成，請查看設定後再手動掛載喔～");
-        }
-
-        private Task MountAsync()
-        {
-            return MountProfileAsync(ReadForm(), saveProfile: true);
-        }
-
-        private async Task MountProfileAsync(
-            DriveProfile profile,
-            bool saveProfile)
-        {
-            var errors = DriveProfileValidator.Validate(profile);
-            if (errors.Count > 0)
-                throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
-            if (saveProfile)
-                ValidateProfileCanBeSaved(profile);
-
-            var runtime = WinFspRuntimePreflight.CheckX64();
-            if (!runtime.IsValid)
-            {
-                RefreshDriverStatus();
-                throw new InvalidOperationException(runtime.Error);
-            }
-
-            var drive = profile.DriveLetter.ToUpperInvariant();
-            if (_mountedDrives.ContainsKey(drive))
-                throw new InvalidOperationException(drive + " is already mounted by 3waSshDrive.");
-            if (GetMountedLogicalDrives().Contains(drive))
-                throw new InvalidOperationException($"磁碟機代號 {drive} 已被 Windows 系統或其他裝置使用 (已掛載)，請選擇其他槽位。");
-
-            SetStatus("Mounting " + profile.Name + " at " + drive + "…");
-            SetMascotSpeech($"正在將遠端 Linux 掛載至 {drive} 槽…連線中 ⏳");
-            var mounted = await Task.Run(() => _mountManager.Mount(profile));
-            _mountedDrives.Add(drive, mounted);
-            RefreshDriveLetters();
-            if (saveProfile)
-                UpsertProfile(profile);
-            else
-                RefreshProfileGrid();
-            SetStatus("Mounted " + profile.Name + " at " + drive);
-            SetMascotSpeech($"已成功掛載到 {drive} 槽！Antigravity 開發全速啟動～(๑•̀ㅂ•́)و✧");
-        }
-
-        private async Task MountAllProfilesAsync()
-        {
-            var profiles = _profileItems.ToList();
-            var mountedCount = 0;
-            var skippedCount = 0;
-            var failedCount = 0;
-
-            foreach (var profile in profiles)
-            {
-                if (IsMounted(profile.DriveLetter))
-                {
-                    skippedCount++;
-                    continue;
-                }
-
-                if (DriveProfileValidator.Validate(profile).Count > 0)
-                {
-                    skippedCount++;
-                    continue;
-                }
-
-                try
-                {
-                    await MountProfileAsync(profile, saveProfile: false);
-                    mountedCount++;
-                }
-                catch
-                {
-                    failedCount++;
-                }
-            }
-
-            RefreshProfileGrid();
-            var result = $"批次掛載完成：{mountedCount} 個成功";
-            if (skippedCount > 0)
-                result += $"，{skippedCount} 個略過";
-            if (failedCount > 0)
-                result += $"，{failedCount} 個失敗";
-            SetStatus(result, failedCount == 0);
-            SetMascotSpeech(failedCount == 0
-                ? "Profile fleet 已完成批次掛載～✨"
-                : "部分 Profile 沒有掛載成功，請查看狀態後再試一次喔～");
-        }
-
-        private async Task UnmountAllProfilesAsync()
-        {
-            var mountedDrives = _mountedDrives.ToList();
-            var unmountedCount = 0;
-            var failedCount = 0;
-
-            foreach (var pair in mountedDrives)
-            {
-                try
-                {
-                    await Task.Run(() => pair.Value.Dispose());
-                    _mountedDrives.Remove(pair.Key);
-                    unmountedCount++;
-                }
-                catch
-                {
-                    failedCount++;
-                }
-            }
-
-            RefreshDriveLetters();
-            RefreshProfileGrid();
-            var result = $"批次卸載完成：{unmountedCount} 個成功";
-            if (failedCount > 0)
-                result += $"，{failedCount} 個失敗";
-            SetStatus(result, failedCount == 0);
-            SetMascotSpeech(failedCount == 0
-                ? "所有 3waSshDrive 掛載已安全卸載。"
-                : "部分掛載沒有卸載成功，請稍後再試。");
-        }
-
         private async Task InstallDriverAsync()
         {
             SetStatus("正在透過 winget 安裝 WinFsp 驅動，請於跳出的管理員提權視窗點選「是」…");
@@ -1311,80 +1151,6 @@ namespace ThreeWa.SshDrive.App
             _mountButton.Enabled = false;
             SetStatus("WinFsp 未安裝或校驗失敗: " + runtime.Error);
             return false;
-        }
-
-        private async Task UnmountAsync()
-        {
-            var drive = SelectedDriveLetter();
-            if (!_mountedDrives.TryGetValue(drive, out var mounted))
-                throw new InvalidOperationException(drive + " is not mounted by 3waSshDrive.");
-
-            SetStatus("Unmounting " + drive + "…");
-            SetMascotSpeech($"正在卸載磁碟機 {drive}…⏳");
-            await Task.Run(() => mounted.Dispose());
-            _mountedDrives.Remove(drive);
-            RefreshDriveLetters();
-            RefreshProfileGrid();
-            SetStatus("Unmounted " + drive);
-            SetMascotSpeech($"磁碟機 {drive} 已卸載，辛苦啦～隨時點我重新掛載喔！☕");
-        }
-
-        private async Task CheckAndReconnectDrivesAsync()
-        {
-            if (_isReconnecting || _busy || _isApplyingUpdate ||
-                _mountedDrives.Count == 0)
-                return;
-            if (!_updateActivityGate.TryBeginActivity(out var activity))
-                return;
-
-            using (activity)
-            {
-                var disconnected = _mountedDrives.Values
-                    .Where(drive => !drive.IsConnected)
-                    .ToList();
-                if (disconnected.Count == 0)
-                    return;
-
-                RefreshProfileGrid();
-
-                _isReconnecting = true;
-                try
-                {
-                    foreach (var drive in disconnected)
-                    {
-                        SetStatus($"磁碟機 {drive.DriveLetter} 連線中斷，正在自動重新連線…", false);
-                        SetMascotSpeech($"偵測到 {drive.DriveLetter} 槽連線中斷，芳寶正在重新連線中…⏳");
-
-                        try
-                        {
-                            await Task.Run(() => drive.EnsureConnected());
-                            SetStatus($"Mounted at {drive.DriveLetter}", true);
-                            SetMascotSpeech($"已成功自動重新連線至 {drive.DriveLetter} 槽！繼續工作吧～✨");
-                            RefreshDriveLetters();
-                            RefreshProfileGrid();
-
-                            if (!Visible)
-                            {
-                                _notifyIcon.ShowBalloonTip(
-                                    3000,
-                                    "3waSshDrive - 自動重新連線",
-                                    $"磁碟機 {drive.DriveLetter} 已成功自動重新連線！",
-                                    ToolTipIcon.Info);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            SetStatus($"磁碟機 {drive.DriveLetter} 重新連線失敗，等待下次重試…", false);
-                            CrashLogger.Log("AutoReconnect", ex);
-                            RefreshProfileGrid();
-                        }
-                    }
-                }
-                finally
-                {
-                    _isReconnecting = false;
-                }
-            }
         }
 
         private void OpenExplorer()
@@ -1415,13 +1181,16 @@ namespace ThreeWa.SshDrive.App
         }
 
         private void UpsertProfile(DriveProfile profile)
-        {
-            ValidateProfileCanBeSaved(profile);
+            => UpsertProfile(profile, _selectedProfileName, selectProfile: true);
 
-            if (!string.IsNullOrWhiteSpace(_selectedProfileName))
+        private void UpsertProfile(DriveProfile profile, string originalName, bool selectProfile)
+        {
+            ValidateProfileCanBeSaved(profile, originalName);
+
+            if (!string.IsNullOrWhiteSpace(originalName))
             {
                 _profileItems.RemoveAll(item =>
-                    string.Equals(item.Name, _selectedProfileName, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(item.Name, originalName, StringComparison.OrdinalIgnoreCase));
             }
 
             _profileItems.RemoveAll(item =>
@@ -1431,16 +1200,16 @@ namespace ThreeWa.SshDrive.App
                 .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             _profileStore.Save(_profileItems);
-            _selectedProfileName = profile.Name;
-            RefreshProfileSelector(profile.Name);
+            if (selectProfile) _selectedProfileName = profile.Name;
+            RefreshProfileSelector(selectProfile ? profile.Name : _selectedProfileName);
         }
 
-        private void ValidateProfileCanBeSaved(DriveProfile profile)
+        private void ValidateProfileCanBeSaved(DriveProfile profile, string originalName)
         {
             var candidates = _profileItems
                 .Where(item => !string.Equals(
                     item.Name,
-                    _selectedProfileName,
+                    originalName,
                     StringComparison.OrdinalIgnoreCase))
                 .Concat(new[] { profile });
             var errors = ProfileSetValidator.ValidateUniqueNamesAndDriveLetters(
@@ -1510,7 +1279,7 @@ namespace ThreeWa.SshDrive.App
             Func<Task> operation,
             bool showError = true)
         {
-            if (_busy || _isApplyingUpdate)
+            if (_busy || _isApplyingUpdate || _profileOperations.Count != 0)
                 return false;
             if (!_updateActivityGate.TryBeginActivity(out var activity))
                 return false;
@@ -1591,26 +1360,31 @@ namespace ThreeWa.SshDrive.App
         private void RefreshActionState()
         {
             var actionsDisabled = _busy || _isApplyingUpdate;
+            var selectedBusy = SelectedProfileIsBusy();
+            var profileActionsDisabled = actionsDisabled || selectedBusy;
+            _cancelOperationButton.Enabled = selectedBusy && !_isApplyingUpdate;
+            foreach (Control field in new Control[] { _name, _host, _port, _username, _remoteRoot, _driveLetter, _hostFingerprint })
+                field.Enabled = !profileActionsDisabled;
             UseWaitCursor = actionsDisabled;
             _profiles.Enabled = !actionsDisabled;
             _profileGrid.Enabled = !actionsDisabled;
             _newButton.Enabled = !actionsDisabled;
-            _testButton.Enabled = !actionsDisabled && IsFormReadyForMount();
-            _unmountButton.Enabled = !actionsDisabled && _mountedDrives.Count > 0;
-            _saveButton.Enabled = !actionsDisabled && IsFormReadyForSave();
-            _deleteButton.Enabled = !actionsDisabled && _profiles.SelectedIndex >= 0 && _profileItems.Count > 0;
+            _testButton.Enabled = !profileActionsDisabled && IsFormReadyForMount();
+            _unmountButton.Enabled = !profileActionsDisabled && _mountedDrives.Count > 0;
+            _saveButton.Enabled = !profileActionsDisabled && IsFormReadyForSave();
+            _deleteButton.Enabled = !profileActionsDisabled && _profiles.SelectedIndex >= 0 && _profileItems.Count > 0;
             _explorerButton.Enabled = !actionsDisabled;
-            _authenticationMode.Enabled = !actionsDisabled;
+            _authenticationMode.Enabled = !profileActionsDisabled;
             _installDriverButton.Enabled = !actionsDisabled;
             _checkUpdatesButton.Enabled =
                 !actionsDisabled && !_isCheckingUpdates;
-            _readOnly.Enabled = !actionsDisabled;
+            _readOnly.Enabled = !profileActionsDisabled;
             _autoMountOnStartup.Enabled =
-                !actionsDisabled &&
+                !profileActionsDisabled &&
                 SelectedAuthenticationMode() == AuthenticationMode.PrivateKey;
 
             var runtime = WinFspRuntimePreflight.CheckX64();
-            var canMount = !actionsDisabled && runtime.IsValid && IsFormReadyForMount();
+            var canMount = !profileActionsDisabled && runtime.IsValid && IsFormReadyForMount();
             _testAndMountButton.Enabled = canMount;
             _mountButton.Enabled = canMount;
             _mountAllButton.Enabled = !actionsDisabled && runtime.IsValid &&
@@ -1739,7 +1513,7 @@ namespace ThreeWa.SshDrive.App
         {
             var usingPrivateKey =
                 SelectedAuthenticationMode() == AuthenticationMode.PrivateKey;
-            var actionsEnabled = !_busy && !_isApplyingUpdate;
+            var actionsEnabled = !_busy && !_isApplyingUpdate && !SelectedProfileIsBusy();
 
             if (usingPrivateKey)
             {
@@ -1819,6 +1593,12 @@ namespace ThreeWa.SshDrive.App
 
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
+            if (!_isExplicitExit && e.CloseReason != CloseReason.UserClosing && _profileOperations.Count != 0)
+            {
+                e.Cancel = true;
+                ExitApplication();
+                return;
+            }
             if (!_isExplicitExit && e.CloseReason == CloseReason.UserClosing)
             {
                 e.Cancel = true;
@@ -1848,8 +1628,7 @@ namespace ThreeWa.SshDrive.App
 
         private void ExitApplication()
         {
-            _isExplicitExit = true;
-            Close();
+            _ = ExitApplicationAsync();
         }
 
         private static void ConfigureComboBox(ComboBox comboBox)

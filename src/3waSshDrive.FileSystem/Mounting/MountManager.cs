@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 using ThreeWa.SshDrive.Core.Models;
 using ThreeWa.SshDrive.Core.Profiles;
 using ThreeWa.SshDrive.Core.Remote;
@@ -33,7 +34,11 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
         }
 
         public MountedDrive Mount(DriveProfile profile)
+            => Mount(profile, CancellationToken.None);
+
+        public MountedDrive Mount(DriveProfile profile, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var errors = DriveProfileValidator.Validate(profile);
             if (errors.Count > 0)
             {
@@ -47,7 +52,11 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
             try
             {
                 remote = _remoteFactory(profile);
-                remote.Connect();
+                if (remote is IRemoteConnectionControl control)
+                    control.Connect(cancellationToken);
+                else
+                    remote.Connect();
+                cancellationToken.ThrowIfCancellationRequested();
 
                 var fileSystem = new SftpReadOnlyFileSystem(
                     remote,
@@ -57,6 +66,13 @@ namespace ThreeWa.SshDrive.FileSystem.Mounting
                 var status = host.Mount(profile.DriveLetter.ToUpperInvariant());
                 if (status < 0)
                     throw new MountException(profile.DriveLetter, status);
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    // Keep ownership until a late successful mount has actually been removed.
+                    host.Unmount();
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
 
                 return new MountedDrive(
                     profile.Name,

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Renci.SshNet;
 using Renci.SshNet.Common;
 using Renci.SshNet.Sftp;
@@ -12,7 +13,7 @@ using ThreeWa.SshDrive.Sftp.Security;
 
 namespace ThreeWa.SshDrive.Sftp
 {
-    public sealed class SshNetRemoteFileSystem : IRemoteFileSystem
+    public sealed class SshNetRemoteFileSystem : IRemoteFileSystem, IRemoteConnectionControl
     {
         private const string TracePathEnvironmentVariable = "3WASSHDRIVE_SFTP_TRACE_PATH";
         private static readonly object TraceLock = new object();
@@ -22,6 +23,8 @@ namespace ThreeWa.SshDrive.Sftp
         private SftpClient _client;
         private PrivateKeyFile _privateKey;
         private bool _disposed;
+        private volatile bool _connecting;
+        private DateTime _nextConnectAttemptUtc;
 
         public SshNetRemoteFileSystem(
             DriveProfile profile,
@@ -35,25 +38,40 @@ namespace ThreeWa.SshDrive.Sftp
         {
             get
             {
-                lock (_lifecycleLock)
-                    return !_disposed && _client?.IsConnected == true;
+                if (!Monitor.TryEnter(_lifecycleLock))
+                    return false;
+                try { return !_disposed && _client?.IsConnected == true; }
+                finally { Monitor.Exit(_lifecycleLock); }
             }
         }
 
         public object SyncRoot { get; } = new object();
+        public bool IsConnecting => _connecting;
 
         public void Connect()
         {
-            lock (_lifecycleLock)
+            Connect(CancellationToken.None);
+        }
+
+        public void Connect(CancellationToken cancellationToken)
+        {
+            // Cancellation while another caller owns the connection must not start a second attempt.
+            cancellationToken.ThrowIfCancellationRequested();
+            while (!Monitor.TryEnter(_lifecycleLock, 100))
+                cancellationToken.ThrowIfCancellationRequested();
+            try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 ThrowIfDisposed();
                 if (_client?.IsConnected == true)
                     return;
+                if (DateTime.UtcNow < _nextConnectAttemptUtc)
+                    throw new RemoteConnectionException("Connection retry is waiting for its cooldown.");
 
-                CleanupClient();
-
+                _connecting = true;
                 try
                 {
+                    CleanupClient();
                     var authentication = CreateAuthenticationMethod();
                     var connectionInfo = new ConnectionInfo(
                         _profile.Host,
@@ -71,16 +89,23 @@ namespace ThreeWa.SshDrive.Sftp
                         OperationTimeout = TimeSpan.FromSeconds(30)
                     };
                     _client.HostKeyReceived += OnHostKeyReceived;
-                    _client.Connect();
+                    _client.ConnectAsync(cancellationToken).GetAwaiter().GetResult();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    _nextConnectAttemptUtc = DateTime.MinValue;
                 }
                 catch (Exception exception)
                 {
+                    _nextConnectAttemptUtc = DateTime.UtcNow.AddSeconds(10);
                     CleanupClient();
+                    if (exception is OperationCanceledException)
+                        throw;
                     throw SshNetExceptionMapper.Translate(
                         exception,
                         _profile.RemoteRoot);
                 }
+                finally { _connecting = false; }
             }
+            finally { Monitor.Exit(_lifecycleLock); }
         }
 
         public RemoteEntry GetEntry(string path)
