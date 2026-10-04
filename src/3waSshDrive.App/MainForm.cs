@@ -22,6 +22,7 @@ namespace ThreeWa.SshDrive.App
         private readonly MountManager _mountManager;
         private readonly Func<HashSet<string>> _getLogicalDrives;
         private readonly Action<string, Exception> _logOperationFailure;
+        private readonly Func<WinFspRuntimeVerification> _checkRuntime;
         private readonly UpdateService _updateService;
         private readonly UpdateCoordinator _updateCoordinator;
         private readonly UpdateActivityGate _updateActivityGate =
@@ -107,13 +108,15 @@ namespace ThreeWa.SshDrive.App
             MountManager mountManager,
             UpdateService updateService,
             Func<HashSet<string>> getLogicalDrives = null,
-            Action<string, Exception> logOperationFailure = null)
+            Action<string, Exception> logOperationFailure = null,
+            Func<WinFspRuntimeVerification> checkRuntime = null)
         {
             _profileStore = profileStore ?? throw new ArgumentNullException(nameof(profileStore));
             _connectionProbe = connectionProbe ?? throw new ArgumentNullException(nameof(connectionProbe));
             _mountManager = mountManager ?? throw new ArgumentNullException(nameof(mountManager));
             _getLogicalDrives = getLogicalDrives ?? GetMountedLogicalDrives;
             _logOperationFailure = logOperationFailure ?? CrashLogger.Log;
+            _checkRuntime = checkRuntime ?? WinFspRuntimePreflight.CheckX64;
             _updateService = updateService ?? throw new ArgumentNullException(nameof(updateService));
             _updateCoordinator = new UpdateCoordinator(this);
 
@@ -1147,7 +1150,7 @@ namespace ThreeWa.SshDrive.App
 
         private bool RefreshDriverStatus()
         {
-            var runtime = WinFspRuntimePreflight.CheckX64();
+            var runtime = _checkRuntime();
             if (runtime.IsValid)
             {
                 _installDriverButton.Visible = false;
@@ -1391,7 +1394,7 @@ namespace ThreeWa.SshDrive.App
                 !profileActionsDisabled &&
                 SelectedAuthenticationMode() == AuthenticationMode.PrivateKey;
 
-            var runtime = WinFspRuntimePreflight.CheckX64();
+            var runtime = _checkRuntime();
             var canMount = !profileActionsDisabled && runtime.IsValid && IsFormReadyForMount();
             _testAndMountButton.Enabled = canMount;
             _mountButton.Enabled = canMount;

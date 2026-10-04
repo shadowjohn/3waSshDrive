@@ -261,7 +261,7 @@ namespace ThreeWa.SshDrive.App.Tests
         internal static MainForm CreateForm(Func<DriveProfile, IRemoteFileSystem> factory, ISshConnectionProbe probe = null)
         {
             var store = new ProfileStore(Path.Combine(Path.GetTempPath(), "sshdrive-tests-" + Guid.NewGuid(), "profiles.json"));
-            var form = new MainForm(store, probe ?? new SshConnectionProbe(), new MountManager(factory, fs => new TestHost()), new UpdateService(new TestUpdater(), new TestLog()), () => new HashSet<string>(), (operation, error) => { });
+            var form = new MainForm(store, probe ?? new SshConnectionProbe(), new MountManager(factory, fs => new TestHost()), new UpdateService(new TestUpdater(), new TestLog()), () => new HashSet<string>(), (operation, error) => { }, () => WinFspRuntimeVerification.Success("test-native", "test-driver", "test-hash", "test-hash"));
             var handle = form.Handle;
             SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
             return form;

@@ -200,7 +200,7 @@ namespace ThreeWa.SshDrive.App
             var errors = DriveProfileValidator.Validate(profile);
             if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
             if (saveProfile) ValidateProfileCanBeSaved(profile, op.PersistedName);
-            var runtime = WinFspRuntimePreflight.CheckX64();
+            var runtime = _checkRuntime();
             if (!runtime.IsValid) throw new InvalidOperationException(runtime.Error);
             var drive = profile.DriveLetter.ToUpperInvariant();
             if (_mountedDrives.ContainsKey(drive) || _getLogicalDrives().Contains(drive))
